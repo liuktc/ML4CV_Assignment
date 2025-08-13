@@ -122,3 +122,4 @@ def plot_semantic_segmentation(image, predicted, gt):
     plt.subplot(1, 3, 3)
     plt.imshow(color(gt.cpu()))
     plt.title("Ground Truth Segmentation")
+    plt.show()
