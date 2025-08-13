@@ -48,6 +48,7 @@ def train_semantic_segmentation(
 
             if i % 100 == 0:
                 print(f"Epoch {epoch}/{epochs} - {loss.item()}")
+                plot_semantic_segmentation(images[0], logits[0], segmentations[0])
 
         avg_train_loss = running_train_loss / len(dl_train)
 
