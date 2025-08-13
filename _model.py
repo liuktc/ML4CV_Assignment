@@ -73,7 +73,7 @@ class SegmentationHead(nn.Module):
 
         self.l1 = nn.Linear(d_model, embedding_size)
 
-        self.up = nn.Upsample(image_size)
+        self.up = nn.Upsample(image_size, mode="bilinear", align_corners=False)
         if num_classes is not None:
             # Segmentation
             self.out = nn.Conv2d(
