@@ -151,3 +151,11 @@ class Proxy_Anchor(torch.nn.Module):
         loss = pos_term + neg_term
 
         return loss
+
+
+# Triplet loss function
+def triplet_loss(anchor, positive, negative, margin=1.0):
+    d_ap = F.pairwise_distance(anchor, positive, p=2)
+    d_an = F.pairwise_distance(anchor, negative, p=2)
+    loss = torch.clamp(d_ap - d_an + margin, min=0.0)
+    return loss.mean()

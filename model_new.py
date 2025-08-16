@@ -40,22 +40,51 @@ class FrozenDINOv2(nn.Module):
 # 2. Small CNN encoder for local details
 # -------------------------------
 class LocalCNN(nn.Module):
-    def __init__(self, in_ch=3, out_ch=128):
+    def __init__(self, in_ch=3, out_ch=128, down_scaling_factor=1):
         super().__init__()
-        self.encoder = nn.Sequential(
-            nn.Conv2d(in_ch, 64, 3, padding="same", stride=1),  # /2
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(64, 128, 3, padding="same", stride=1),  # /4
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(128, out_ch, 3, padding="same"),  # keep /4
-            nn.BatchNorm2d(out_ch),
-            nn.ReLU(inplace=True),
-        )
+        # self.down_scaling_factor = down_scaling_factor
+
+        if down_scaling_factor == 1:
+            self.encoder = nn.Sequential(
+                nn.Conv2d(in_ch, 64, 3, padding="same", stride=1),
+                nn.BatchNorm2d(64),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(64, 128, 3, padding="same", stride=1),
+                nn.BatchNorm2d(128),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(128, out_ch, 3, padding="same"),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+            )
+        elif down_scaling_factor == 2:
+            self.encoder = nn.Sequential(
+                nn.Conv2d(in_ch, 64, 3, padding=1, stride=2),
+                nn.BatchNorm2d(64),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(64, 128, 3, padding=1, stride=1),
+                nn.BatchNorm2d(128),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(128, out_ch, 3, padding=1),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+            )
+        elif down_scaling_factor == 4:
+            self.encoder = nn.Sequential(
+                nn.Conv2d(in_ch, 64, 3, padding=1, stride=2),
+                nn.BatchNorm2d(64),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(64, 128, 3, padding=1, stride=2),
+                nn.BatchNorm2d(128),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(128, out_ch, 3, padding=1),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+            )
 
     def forward(self, x):
-        return self.encoder(x)  # (B, out_ch, H/4, W/4)
+        return self.encoder(
+            x
+        )  # (B, out_ch, H/down_scaling_factor, W/down_scaling_factor)
 
 
 # -------------------------------
@@ -97,17 +126,28 @@ class DecoderHead(nn.Module):
 # 4. Full model
 # -------------------------------
 class DinoMetricLearning(nn.Module):
-    def __init__(self, dinov2_model, dino_out_dim=384, cnn_out_dim=128, embed_dim=128):
+    def __init__(
+        self,
+        dinov2_model,
+        dino_out_dim=384,
+        cnn_out_dim=128,
+        embed_dim=128,
+        down_scaling_factor=1,
+    ):
         super().__init__()
         self.dino = FrozenDINOv2(dinov2_model, out_dim=dino_out_dim)
-        self.local_cnn = LocalCNN(in_ch=3, out_ch=cnn_out_dim)
+        self.local_cnn = LocalCNN(
+            in_ch=3, out_ch=cnn_out_dim, down_scaling_factor=down_scaling_factor
+        )
         self.decoder = DecoderHead(dino_out_dim + cnn_out_dim, embed_dim)
 
     def forward(self, x):
         B, _, H, W = x.shape
 
         # Local CNN features (high-res, e.g., H/4)
-        local_feats = self.local_cnn(x)  # (B, C_c, H/4, W/4)
+        local_feats = self.local_cnn(
+            x
+        )  # (B, C_c, H / down_scaling_factor, W / down_scaling_factor)
 
         # DINO features (low-res, e.g., H/14)
         dino_feats = self.dino(x)  # (B, C_d, H_p, W_p)
@@ -116,10 +156,14 @@ class DinoMetricLearning(nn.Module):
         )
 
         # Concatenate
-        fused = torch.cat([dino_up, local_feats], dim=1)  # (B, C_d+C_c, H/4, W/4)
+        fused = torch.cat(
+            [dino_up, local_feats], dim=1
+        )  # (B, C_d+C_c, H / down_scaling_factor, W / down_scaling_factor)
 
         # Decoder to embedding space
-        emb = self.decoder(fused)  # (B, embed_dim, H/4, W/4)
+        emb = self.decoder(
+            fused
+        )  # (B, embed_dim, H / down_scaling_factor, W / down_scaling_factor)
 
         # L2 normalize for metric learning
         # emb = F.normalize(emb, p=2, dim=1)

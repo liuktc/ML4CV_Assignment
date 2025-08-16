@@ -5,6 +5,7 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms.functional import pad
+import random
 
 
 class StreetHazardDataset(Dataset):
@@ -115,6 +116,65 @@ class StreetHazardDataset(Dataset):
                 selected_pixels = torch.cat((selected_pixels, selected_indexes))
 
             return image, segmentation.long(), (selected_pixels.long(), target_matrix)
+
+
+# class StreetHazardDatasetTriplet(Dataset)
+
+
+class StreetHazardDatasetTriplet(Dataset):
+    def __init__(
+        self,
+        annotations_file,
+        img_dir,
+        image_transform=None,
+        target_transform=None,
+    ):
+        # Read the JSON file
+        with open(annotations_file, "r") as f:
+            self.data = json.load(f)
+
+        self.img_dir = img_dir
+        self.image_transform = image_transform
+        self.target_transform = target_transform
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        sample = self.data[idx]
+        img_path = os.path.join(self.img_dir, sample["fpath_img"])
+        seg_path = os.path.join(self.img_dir, sample["fpath_segm"])
+
+        image = Image.open(img_path).convert("RGB")
+        segmentation = Image.open(seg_path)
+
+        if self.image_transform:
+            image = self.image_transform(image)
+
+        if self.target_transform:
+            segmentation = self.target_transform(segmentation)
+            segmentation = torch.as_tensor(np.array(segmentation)) - 1
+
+        segmentation = segmentation.long()
+        classes = torch.unique(segmentation)
+        classes = classes[classes != 255]  # ignore padding class
+
+        # Select a random anchor class
+        anchor_class = random.choice(classes).item()
+        mask_anchor = (segmentation == anchor_class).nonzero(as_tuple=False)
+        anchor_idx = mask_anchor[torch.randint(len(mask_anchor), (1,))].squeeze(0)
+
+        # Positive: pick another pixel from the same class
+        positive_idx = anchor_idx
+        while torch.equal(positive_idx, anchor_idx):
+            positive_idx = mask_anchor[torch.randint(len(mask_anchor), (1,))].squeeze(0)
+
+        # Negative: pick a pixel from a different class
+        negative_class = random.choice(classes[classes != anchor_class]).item()
+        mask_negative = (segmentation == negative_class).nonzero(as_tuple=False)
+        negative_idx = mask_negative[torch.randint(len(mask_negative), (1,))].squeeze(0)
+
+        return image, segmentation, (anchor_idx, positive_idx, negative_idx)
 
 
 class PadToMultipleOf14:
