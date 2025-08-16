@@ -67,7 +67,7 @@ def pad_to_multiple_of_14(image):
 def semantic_embeddings_plot(model, dl, num_points: int = 100, device: str = "cpu"):
     for images, segmentations, _ in dl:
         image = images[0].to(device)
-        segmentation = segmentations[0].to(device)
+        segmentation = segmentations[0].cpu()
         plt.imshow(image.permute(1, 2, 0).cpu())
         plt.show()
         plt.imshow(color(segmentation.cpu()))
@@ -86,8 +86,8 @@ def semantic_embeddings_plot(model, dl, num_points: int = 100, device: str = "cp
         print(pca_out.shape)
 
         # Pick 1000 random pixels
-        selected_pixels_x = torch.randperm(H)[:num_points]
-        selected_pixels_y = torch.randperm(W)[:num_points]
+        selected_pixels_x = torch.randperm(H)[:num_points].cpu()
+        selected_pixels_y = torch.randperm(W)[:num_points].cpu()
         different_segmentation_values = torch.unique(segmentation)
 
         print(different_segmentation_values)
