@@ -164,6 +164,12 @@ class StreetHazardDatasetTriplet(Dataset):
         mask_anchor = (segmentation == anchor_class).nonzero(as_tuple=False)
         anchor_idx = mask_anchor[torch.randint(len(mask_anchor), (1,))].squeeze(0)
 
+        # If there is just one pixel from the choosen class, pick another class
+        while len(mask_anchor) <= 1:
+            anchor_class = random.choice(classes).item()
+            mask_anchor = (segmentation == anchor_class).nonzero(as_tuple=False)
+            anchor_idx = mask_anchor[torch.randint(len(mask_anchor), (1,))].squeeze(0)
+
         # Positive: pick another pixel from the same class
         positive_idx = anchor_idx
         while torch.equal(positive_idx, anchor_idx):
