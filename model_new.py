@@ -43,13 +43,13 @@ class LocalCNN(nn.Module):
     def __init__(self, in_ch=3, out_ch=128):
         super().__init__()
         self.encoder = nn.Sequential(
-            nn.Conv2d(in_ch, 64, 3, padding=1, stride=2),  # /2
+            nn.Conv2d(in_ch, 64, 3, padding="same", stride=1),  # /2
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
-            nn.Conv2d(64, 128, 3, padding=1, stride=2),  # /4
+            nn.Conv2d(64, 128, 3, padding="same", stride=1),  # /4
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
-            nn.Conv2d(128, out_ch, 3, padding=1),  # keep /4
+            nn.Conv2d(128, out_ch, 3, padding="same"),  # keep /4
             nn.BatchNorm2d(out_ch),
             nn.ReLU(inplace=True),
         )
@@ -61,36 +61,36 @@ class LocalCNN(nn.Module):
 # -------------------------------
 # 3. Decoder + projection head
 # -------------------------------
-# class DecoderHead(nn.Module):
-#     def __init__(self, in_ch, embed_dim=128):
-#         super().__init__()
-#         self.decoder = nn.Sequential(
-#             nn.Conv2d(in_ch, 256, 3, padding=1),
-#             nn.BatchNorm2d(256),
-#             nn.ReLU(inplace=True),
-#             nn.Conv2d(256, embed_dim, 1),  # projection to embedding dim
-#         )
-
-#     def forward(self, x):
-#         return self.decoder(x)
-
-
 class DecoderHead(nn.Module):
     def __init__(self, in_ch, embed_dim=128):
         super().__init__()
         self.decoder = nn.Sequential(
-            nn.Conv2d(in_ch, 256, kernel_size=3, padding=1),
+            nn.Conv2d(in_ch, 256, 3, padding=1),
             nn.BatchNorm2d(256),
             nn.ReLU(inplace=True),
-            # predict features for PixelShuffle (needs out_ch * r^2 channels)
-            nn.Conv2d(256, embed_dim * (4 * 4), kernel_size=3, padding=1),
-            nn.PixelShuffle(upscale_factor=4),  # rearranges channels into 4×H, 4×W
-            nn.BatchNorm2d(embed_dim),
-            nn.ReLU(inplace=True),
+            nn.Conv2d(256, embed_dim, 1),  # projection to embedding dim
         )
 
     def forward(self, x):
         return self.decoder(x)
+
+
+# class DecoderHead(nn.Module):
+#     def __init__(self, in_ch, embed_dim=128):
+#         super().__init__()
+#         self.decoder = nn.Sequential(
+#             nn.Conv2d(in_ch, 256, kernel_size=3, padding=1),
+#             nn.BatchNorm2d(256),
+#             nn.ReLU(inplace=True),
+#             # predict features for PixelShuffle (needs out_ch * r^2 channels)
+#             nn.Conv2d(256, embed_dim * (4 * 4), kernel_size=3, padding=1),
+#             nn.PixelShuffle(upscale_factor=4),  # rearranges channels into 4×H, 4×W
+#             nn.BatchNorm2d(embed_dim),
+#             nn.ReLU(inplace=True),
+#         )
+
+#     def forward(self, x):
+#         return self.decoder(x)
 
 
 # -------------------------------
