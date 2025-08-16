@@ -144,7 +144,6 @@ class DinoSegmentation(nn.Module):
     def forward(self, x):
         x = self.feature_extractor(x)
         x = x.permute(0, 2, 3, 1)
-        print(x.shape)
         x = self.segmentation_head(x)
         x = x.permute(0, 3, 1, 2)
         return x
