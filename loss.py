@@ -247,23 +247,40 @@ class MagnetLoss(nn.Module):
         """
         N, D = embeddings.shape
 
+        # Normalize embeddings to keep distances bounded
+        embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+
         if (self.cluster_centers is None) or (
             self.epoch_counter % self.cluster_update_every == 0
         ):
             self.update_clusters(embeddings, labels)
 
-        # distances to all cluster centers
+        # Normalize cluster centers as well
+        self.cluster_centers = torch.nn.functional.normalize(
+            self.cluster_centers, p=2, dim=1
+        )
+
+        # Distances to all cluster centers
         dists = torch.cdist(embeddings, self.cluster_centers) ** 2  # [N, M]
 
-        # distance to the assigned (positive) cluster for each sample
+        # Clamp distances to avoid overflow/underflow
+        dists = torch.clamp(dists, min=1e-6, max=50.0)
+
+        # Distance to the assigned (positive) cluster for each sample
         pos_dists = dists[
             torch.arange(N, device=embeddings.device), self.cluster_labels
         ]  # [N]
 
         # Magnet loss denominator over all clusters
-        exp_dists = torch.exp(-0.5 * dists)  # [N, M]
-        denominator = exp_dists.sum(dim=1)  # [N]
+        # Use log-sum-exp trick for numerical stability
+        logits = -0.5 * dists  # [N, M]
+        pos_logits = -0.5 * pos_dists  # [N]
 
-        loss = -torch.log(torch.exp(-0.5 * pos_dists) / (denominator + 1e-8))
+        # logsumexp across clusters
+        log_denominator = torch.logsumexp(logits, dim=1)  # [N]
+
+        # final loss
+        loss = -(pos_logits - log_denominator)
+
         self.epoch_counter += 1
         return loss.mean()
