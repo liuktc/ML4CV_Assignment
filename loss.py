@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
+from sklearn.cluster import KMeans
 
 
 def batch_nt_xent(x, target_matrix, temperature, device="cpu"):
@@ -159,3 +160,110 @@ def triplet_loss(anchor, positive, negative, margin=1.0):
     d_an = F.pairwise_distance(anchor, negative, p=2)
     loss = torch.clamp(d_ap - d_an + margin, min=0.0)
     return loss.mean()
+
+
+import torch
+import torch.nn as nn
+from sklearn.cluster import KMeans
+
+
+class MagnetLoss(nn.Module):
+    def __init__(
+        self, num_classes, num_clusters=3, margin=0.1, cluster_update_every=10
+    ):
+        super().__init__()
+        self.num_classes = num_classes
+        self.num_clusters = num_clusters
+        self.margin = margin
+        self.cluster_update_every = cluster_update_every
+
+        self.cluster_centers = (
+            None  # [M, D], M = total clusters across classes present in the batch
+        )
+        self.cluster_labels = None  # [N], global cluster index per sample
+        self.epoch_counter = 0
+
+    def update_clusters(self, embeddings, labels):
+        """
+        embeddings: [N, D]
+        labels:     [N]
+        """
+        device = embeddings.device
+        D = embeddings.size(1)
+
+        centers_list = []
+        # we'll fill every position in this tensor (since every class with >0 samples is assigned)
+        cluster_assignments = torch.empty(
+            labels.size(0), dtype=torch.long, device=device
+        )
+
+        # global running index over all clusters created so far
+        idx = 0
+
+        for cls in range(self.num_classes):
+            cls_mask = labels == cls
+            n_cls = int(cls_mask.sum().item())
+            if n_cls == 0:
+                # no samples of this class in the batch → skip (don't pad with zeros)
+                continue
+
+            # keep the feature dimensionality intact: [n_cls, D]
+            cls_embeddings = embeddings[cls_mask].detach().cpu().numpy()
+
+            # if n_cls < num_clusters, cap k to n_cls
+            k = min(self.num_clusters, n_cls)
+
+            kmeans = KMeans(n_clusters=k, n_init=5)
+            assignments = kmeans.fit_predict(cls_embeddings)  # [n_cls]
+            centers = torch.tensor(
+                kmeans.cluster_centers_,  # [k, D]
+                device=device,
+                dtype=embeddings.dtype,
+            )
+
+            centers_list.append(centers)
+
+            # assign global cluster ids to the samples of this class
+            cluster_assignments[cls_mask] = (
+                torch.as_tensor(assignments, device=device, dtype=torch.long) + idx
+            )
+
+            # advance global cluster index by the number of clusters we actually used
+            idx += k
+
+        if len(centers_list) == 0:
+            # extremely degenerate case: empty batch
+            self.cluster_centers = torch.zeros(
+                (1, D), device=device, dtype=embeddings.dtype
+            )
+        else:
+            self.cluster_centers = torch.cat(centers_list, dim=0)  # [M, D]
+        self.cluster_labels = cluster_assignments  # [N]
+
+    def forward(self, embeddings, labels):
+        """
+        embeddings: [N, D]
+        labels:     [N]
+        """
+        N, D = embeddings.shape
+
+        if (self.cluster_centers is None) or (
+            self.epoch_counter % self.cluster_update_every == 0
+        ):
+            self.update_clusters(embeddings, labels)
+
+        # distances to all cluster centers
+        dists = torch.cdist(embeddings, self.cluster_centers) ** 2  # [N, M]
+
+        # distance to the assigned (positive) cluster for each sample
+        pos_dists = dists[
+            torch.arange(N, device=embeddings.device), self.cluster_labels
+        ]  # [N]
+
+        # Magnet loss denominator over all clusters
+        exp_dists = torch.exp(-0.5 * dists)  # [N, M]
+        denominator = exp_dists.sum(dim=1)  # [N]
+
+        loss = -torch.log(torch.exp(-0.5 * pos_dists) / (denominator + 1e-8))
+        self.epoch_counter += 1
+        return loss.mean()
