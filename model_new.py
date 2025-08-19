@@ -196,30 +196,28 @@ class DinoSegmentation(nn.Module):
         return x
 
 
-# -------------------------------
-# Example usage
-# -------------------------------
-if __name__ == "__main__":
-    from torch.hub import load
-    # Load a DINOv2 model from torch hub or other source
-    # dinov2_model = load('facebookresearch/dinov2', 'dinov2_vits14')  # example
+class DinoUpsampling(nn.Module):
+    def __init__(self, dino_model, out_dim=512):
+        self.dino = dino_model
+        # Freeze DINO parameters
+        for param in self.dino.parameters():
+            param.requires_grad = False
 
-    # For now, just mock DINO
-    class DummyDINO(nn.Module):
-        def __init__(self, embed_dim=384):
-            super().__init__()
-            self.embed_dim = embed_dim
+        self.out_dim = out_dim
+        self.fc = nn.Sequential(
+            nn.Linear(dino_model.embed_dim, out_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(out_dim, out_dim),
+        )
 
-        def get_intermediate_layers(self, x, n=1):
-            B, _, H, W = x.shape
-            patch_h, patch_w = H // 14, W // 14
-            return [torch.randn(B, patch_h * patch_w, self.embed_dim)]
+    def forward(self, x):
+        B, _, H, W = x.shape
 
-    dinov2_model = DummyDINO(embed_dim=384)
+        # Compute DINO features and upsample to original resolution
+        feats = self.dino(x)
+        feats = F.interpolate(feats, size=(H, W), mode="bilinear", align_corners=False)
 
-    model = DinoMetricLearning(
-        dinov2_model, dino_out_dim=384, cnn_out_dim=128, embed_dim=128
-    )
-    img = torch.randn(2, 3, 224, 224)
-    emb = model(img)
-    print("Embedding shape:", emb.shape)  # Expect (B, 128, H/4, W/4)
+        # Apply fully connected layers
+        feats = self.fc(feats)
+
+        return feats
