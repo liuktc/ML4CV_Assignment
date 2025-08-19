@@ -27,7 +27,7 @@ def nt_xent(x, target_matrix, temperature, device="cpu"):
     assert len(x.size()) == 2
 
     # Cosine similarity
-    xcs = F.cosine_similarity(x[None, :, :], x[:, None, :], dim=-1)
+    xcs = F.cosine_similarity(x[None, :, :], x[:, None, :], dim=-1).to(device)
     # Set logit of diagonal element to "inf" signifying complete
     # correlation. sigmoid(inf) = 1.0 so this will work out nicely
     # when computing the Binary cross-entropy Loss.
@@ -39,7 +39,7 @@ def nt_xent(x, target_matrix, temperature, device="cpu"):
     # The method *_with_logits() uses the log-sum-exp-trick, which causes inf and -inf values
     # to result in a NaN result.
     # Convert target matrix to float
-    target_matrix = target_matrix.float()
+    target_matrix = target_matrix.float().to(device)
     loss = F.binary_cross_entropy(
         (xcs / temperature).sigmoid(), target_matrix, reduction="none"
     )
