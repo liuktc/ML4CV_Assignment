@@ -92,6 +92,7 @@ def train_metric_learning(
     optimizer: torch.optim.Optimizer,
     plot_interval: int = 1,
     log_dir: str = "./runs",  # TensorBoard log directory
+    print_loss: bool = False,
 ):
     writer = SummaryWriter(log_dir)
     global_step = 0
@@ -116,6 +117,10 @@ def train_metric_learning(
 
             running_train_loss += loss.item()
             writer.add_scalar("Train/Loss", loss.item(), global_step)
+            if print_loss:
+                print(
+                    f"Epoch {epoch}/{epochs} - Step {global_step} - Loss: {loss.item()}"
+                )
             global_step += 1
 
             if i % plot_interval == 0:

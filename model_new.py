@@ -197,7 +197,7 @@ class DinoSegmentation(nn.Module):
 
 
 class DinoUpsampling(nn.Module):
-    def __init__(self, dino_model, out_dim=512):
+    def __init__(self, dino_model, out_dim=512, normalize: bool = True):
         super().__init__()
         self.dino = FrozenDINOv2(dino_model)
 
@@ -208,16 +208,16 @@ class DinoUpsampling(nn.Module):
             nn.Linear(out_dim, out_dim),
         )
 
+        self.normalize = normalize
+
     def forward(self, x):
         B, _, H, W = x.shape
 
         # Compute DINO features and upsample to original resolution
         feats = self.dino(x)
-        print(feats.shape)
         feats = F.interpolate(
             feats, size=(H, W), mode="bilinear", align_corners=False
         )  # (B, C, H, W)
-        print(feats.shape)
 
         feats = feats.permute(0, 2, 3, 1)  # (B, H, W, C)
 
@@ -225,5 +225,9 @@ class DinoUpsampling(nn.Module):
         feats = self.fc(feats)
 
         feats = feats.permute(0, 3, 1, 2)  # (B, C, H, W)
+
+        # Normalize features
+        if self.normalize:
+            feats = F.normalize(feats, p=2, dim=1)
 
         return feats
