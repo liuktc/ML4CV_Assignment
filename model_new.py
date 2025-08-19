@@ -214,10 +214,16 @@ class DinoUpsampling(nn.Module):
         # Compute DINO features and upsample to original resolution
         feats = self.dino(x)
         print(feats.shape)
-        feats = F.interpolate(feats, size=(H, W), mode="bilinear", align_corners=False)
+        feats = F.interpolate(
+            feats, size=(H, W), mode="bilinear", align_corners=False
+        )  # (B, C, H, W)
         print(feats.shape)
+
+        feats = feats.permute(0, 2, 3, 1)  # (B, H, W, C)
 
         # Apply fully connected layers
         feats = self.fc(feats)
+
+        feats = feats.permute(0, 3, 1, 2)  # (B, C, H, W)
 
         return feats
