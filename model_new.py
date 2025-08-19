@@ -25,8 +25,8 @@ class FrozenDINOv2(nn.Module):
         We'll reshape to (B, C, H_p, W_p).
         """
         B, C, H, W = x.shape
-        H = H // 14
-        W = W // 14
+        H = H // 16
+        W = W // 16
         feats = self.dino(x, is_training=True)["x_norm_patchtokens"]
         B, HW, d_model = feats.shape
         feats = feats.view((B, H, W, d_model))
