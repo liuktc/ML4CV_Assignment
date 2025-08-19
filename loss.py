@@ -157,6 +157,7 @@ class Proxy_Anchor(torch.nn.Module):
         # Make:
         # X: (C, B*H*W)
         # labels: (B*H*W)
+        print(X.shape)
         X = X.view(X.size(1), -1)
         labels = labels.view(-1)
 
