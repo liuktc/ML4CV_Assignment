@@ -3,3 +3,4 @@ __pycache__
 *.pth
 venv
 dinov3
+runs

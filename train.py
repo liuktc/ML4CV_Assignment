@@ -110,7 +110,12 @@ def train_metric_learning(
 
             embeddings = model(images)
 
-            loss = criterion(embeddings, selected_pixels, target_matrix)
+            loss = criterion(
+                X=embeddings,
+                labels=segmentations,
+                selected_pixels=selected_pixels,
+                target_matrix=target_matrix,
+            )
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()

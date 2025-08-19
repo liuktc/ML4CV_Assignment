@@ -89,16 +89,16 @@ class NT_Xent_Loss(nn.Module):
         super(NT_Xent_Loss, self).__init__()
         self.temperature = temperature
 
-    def forward(self, x, selected_pixels, target_matrix):
-        return nt_xent_loss(x, selected_pixels, target_matrix, self.temperature)
+    def forward(self, X, selected_pixels, target_matrix, **kwargs):
+        return nt_xent_loss(X, selected_pixels, target_matrix, self.temperature)
 
 
-def binarize(T, nb_classes):
+def binarize(T, num_classes):
     device = T.device
     T = T.cpu().numpy()
     import sklearn.preprocessing
 
-    T = sklearn.preprocessing.label_binarize(T, classes=range(0, nb_classes))
+    T = sklearn.preprocessing.label_binarize(T, classes=range(0, num_classes))
     print(device)
     # if device == "cpu":
     if device == torch.device("cpu"):
@@ -118,27 +118,55 @@ def l2_norm(input):
     return output
 
 
+from dataset import sample_pixels_per_class
+
+
 class Proxy_Anchor(torch.nn.Module):
-    def __init__(self, nb_classes, sz_embed, mrg=0.1, alpha=32, device="cpu"):
+    def __init__(
+        self,
+        num_classes,
+        embedding_size,
+        num_pixels_per_class=10,
+        mrg=0.1,
+        alpha=32,
+        device="cpu",
+    ):
         torch.nn.Module.__init__(self)
         # Proxy Anchor Initialization
-        if device == "cpu":
-            self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed))
+        if device == torch.device("cpu"):
+            self.proxies = torch.nn.Parameter(torch.randn(num_classes, embedding_size))
         else:
-            self.proxies = torch.nn.Parameter(torch.randn(nb_classes, sz_embed).cuda())
+            self.proxies = torch.nn.Parameter(
+                torch.randn(num_classes, embedding_size).cuda()
+            )
 
-        nn.init.kaiming_normal_(self.proxies, mode="fan_out")
+        # nn.init.kaiming_normal_(self.proxies, mode="fan_out")
+        # Manually normalize the proxies right after initialization
+        self.proxies.data = torch.nn.functional.normalize(self.proxies.data, p=2, dim=1)
 
-        self.nb_classes = nb_classes
-        self.sz_embed = sz_embed
+        self.num_classes = num_classes
+        self.embedding_size = embedding_size
         self.mrg = mrg
         self.alpha = alpha
+        self.num_pixels_per_class = num_pixels_per_class
 
-    def forward(self, X, T):
+    def forward(self, X, labels, **kwargs):
+        # X: (B, C, H, W)
+        # labels: (B, H, W)
+
+        # Make:
+        # X: (C, B*H*W)
+        # labels: (B*H*W)
+        X = X.view(X.size(1), -1)
+        labels = labels.view(-1)
+
+        X, labels = sample_pixels_per_class(X, labels, self.num_pixels_per_class)
+
+        # Pick num_pixels random pixels
         P = self.proxies
 
-        cos = F.linear(l2_norm(X), l2_norm(P))  # Calcluate cosine similarity
-        P_one_hot = binarize(T=T, nb_classes=self.nb_classes)
+        cos = F.linear(l2_norm(X.T), l2_norm(P))  # Calcluate cosine similarity
+        P_one_hot = binarize(T=labels, num_classes=self.num_classes)
         N_one_hot = 1 - P_one_hot
 
         pos_exp = torch.exp(-self.alpha * (cos - self.mrg))
@@ -157,7 +185,7 @@ class Proxy_Anchor(torch.nn.Module):
         )
 
         pos_term = torch.log(1 + P_sim_sum).sum() / num_valid_proxies
-        neg_term = torch.log(1 + N_sim_sum).sum() / self.nb_classes
+        neg_term = torch.log(1 + N_sim_sum).sum() / self.num_classes
         loss = pos_term + neg_term
 
         return loss
@@ -192,13 +220,13 @@ class MagnetLoss(nn.Module):
         self.cluster_labels = None  # [N], global cluster index per sample
         self.epoch_counter = 0
 
-    def update_clusters(self, embeddings, labels):
+    def update_clusters(self, X, labels, **kwargs):
         """
         embeddings: [N, D]
         labels:     [N]
         """
-        device = embeddings.device
-        D = embeddings.size(1)
+        device = X.device
+        D = X.size(1)
 
         centers_list = []
         # we'll fill every position in this tensor (since every class with >0 samples is assigned)
@@ -217,7 +245,7 @@ class MagnetLoss(nn.Module):
                 continue
 
             # keep the feature dimensionality intact: [n_cls, D]
-            cls_embeddings = embeddings[cls_mask].detach().cpu().numpy()
+            cls_embeddings = X[cls_mask].detach().cpu().numpy()
 
             # if n_cls < num_clusters, cap k to n_cls
             k = min(self.num_clusters, n_cls)
@@ -227,7 +255,7 @@ class MagnetLoss(nn.Module):
             centers = torch.tensor(
                 kmeans.cluster_centers_,  # [k, D]
                 device=device,
-                dtype=embeddings.dtype,
+                dtype=X.dtype,
             )
 
             centers_list.append(centers)
@@ -242,27 +270,25 @@ class MagnetLoss(nn.Module):
 
         if len(centers_list) == 0:
             # extremely degenerate case: empty batch
-            self.cluster_centers = torch.zeros(
-                (1, D), device=device, dtype=embeddings.dtype
-            )
+            self.cluster_centers = torch.zeros((1, D), device=device, dtype=X.dtype)
         else:
             self.cluster_centers = torch.cat(centers_list, dim=0)  # [M, D]
         self.cluster_labels = cluster_assignments  # [N]
 
-    def forward(self, embeddings, labels):
+    def forward(self, X, labels, **kwargs):
         """
         embeddings: [N, D]
         labels:     [N]
         """
-        N, D = embeddings.shape
+        N, D = X.shape
 
         # Normalize embeddings to keep distances bounded
-        embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+        X = torch.nn.functional.normalize(X, p=2, dim=1)
 
         if (self.cluster_centers is None) or (
             self.epoch_counter % self.cluster_update_every == 0
         ):
-            self.update_clusters(embeddings, labels)
+            self.update_clusters(X, labels)
 
         # Normalize cluster centers as well
         self.cluster_centers = torch.nn.functional.normalize(
@@ -270,15 +296,13 @@ class MagnetLoss(nn.Module):
         )
 
         # Distances to all cluster centers
-        dists = torch.cdist(embeddings, self.cluster_centers) ** 2  # [N, M]
+        dists = torch.cdist(X, self.cluster_centers) ** 2  # [N, M]
 
         # Clamp distances to avoid overflow/underflow
         dists = torch.clamp(dists, min=1e-6, max=50.0)
 
         # Distance to the assigned (positive) cluster for each sample
-        pos_dists = dists[
-            torch.arange(N, device=embeddings.device), self.cluster_labels
-        ]  # [N]
+        pos_dists = dists[torch.arange(N, device=X.device), self.cluster_labels]  # [N]
 
         # Magnet loss denominator over all clusters
         # Use log-sum-exp trick for numerical stability

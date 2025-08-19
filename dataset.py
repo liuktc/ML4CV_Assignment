@@ -211,3 +211,36 @@ class PadToMultipleOf16:
         new_width = ((width + 15) // 16) * 16
         new_height = ((height + 15) // 16) * 16
         return new_width, new_height
+
+
+def sample_pixels_per_class(X, labels, num_samples_per_class):
+    """
+    Sample a fixed number of pixels per class from the segmentation labels.
+
+    Args:
+        X (torch.Tensor): Input tensor of shape (D, N).
+        labels (torch.Tensor): Segmentation labels of shape (N, ).
+        num_samples_per_class (int): Number of pixels to sample per class.
+    Returns:
+        torch.Tensor: Tensor containing sampled pixels.
+    """
+    classes = torch.unique(labels)
+    sampled_pixels = []
+    sampled_labels = []
+
+    for c in classes:
+        if c == 255:  # Skip ignore class
+            continue
+
+        mask = labels == c
+        pixels = X[:, mask]
+        if pixels.size(1) > num_samples_per_class:
+            indices = torch.randperm(pixels.size(1))[:num_samples_per_class]
+            pixels = pixels[:, indices]
+
+        sampled_pixels.append(pixels)
+        sampled_labels.extend([c] * pixels.size(1))
+
+    return torch.cat(sampled_pixels, dim=1), torch.tensor(
+        sampled_labels, dtype=torch.long
+    )
