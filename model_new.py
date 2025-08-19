@@ -199,10 +199,7 @@ class DinoSegmentation(nn.Module):
 class DinoUpsampling(nn.Module):
     def __init__(self, dino_model, out_dim=512):
         super().__init__()
-        self.dino = dino_model
-        # Freeze DINO parameters
-        for param in self.dino.parameters():
-            param.requires_grad = False
+        self.dino = FrozenDINOv2(dino_model)
 
         self.out_dim = out_dim
         self.fc = nn.Sequential(
@@ -216,6 +213,7 @@ class DinoUpsampling(nn.Module):
 
         # Compute DINO features and upsample to original resolution
         feats = self.dino(x)
+        print(feats.shape)
         feats = F.interpolate(feats, size=(H, W), mode="bilinear", align_corners=False)
 
         # Apply fully connected layers
