@@ -84,6 +84,15 @@ def nt_xent_loss(x, selected_pixels, target_matrix, temperature, device="cpu"):
     return batch_nt_xent(x, target_matrix, temperature, device)
 
 
+class NT_Xent_Loss(nn.Module):
+    def __init__(self, temperature=0.1):
+        super(NT_Xent_Loss, self).__init__()
+        self.temperature = temperature
+
+    def forward(self, x, selected_pixels, target_matrix):
+        return nt_xent_loss(x, selected_pixels, target_matrix, self.temperature)
+
+
 def binarize(T, nb_classes):
     device = T.device
     T = T.cpu().numpy()

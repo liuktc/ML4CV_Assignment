@@ -133,6 +133,7 @@ class DinoMetricLearning(nn.Module):
         cnn_out_dim=128,
         embed_dim=128,
         down_scaling_factor=1,
+        normalize=True,
     ):
         super().__init__()
         self.dino = FrozenDINOv2(dinov2_model, out_dim=dino_out_dim)
@@ -140,6 +141,7 @@ class DinoMetricLearning(nn.Module):
             in_ch=3, out_ch=cnn_out_dim, down_scaling_factor=down_scaling_factor
         )
         self.decoder = DecoderHead(dino_out_dim + cnn_out_dim, embed_dim)
+        self.normalize = normalize
 
     def forward(self, x):
         B, _, H, W = x.shape
@@ -166,14 +168,15 @@ class DinoMetricLearning(nn.Module):
         )  # (B, embed_dim, H / down_scaling_factor, W / down_scaling_factor)
 
         # L2 normalize for metric learning
-        # emb = F.normalize(emb, p=2, dim=1)
+        if self.normalize:
+            emb = F.normalize(emb, p=2, dim=1)
         return emb
 
 
 class DinoSegmentation(nn.Module):
     def __init__(
         self,
-        dinov2_model,
+        dino_model,
         num_classes,
         dino_out_dim=384,
         cnn_out_dim=128,
@@ -181,7 +184,7 @@ class DinoSegmentation(nn.Module):
     ):
         super().__init__()
         self.feature_extractor = DinoMetricLearning(
-            dinov2_model, dino_out_dim, cnn_out_dim, embed_dim
+            dino_model, dino_out_dim, cnn_out_dim, embed_dim
         )
         self.segmentation_head = nn.Linear(embed_dim, num_classes)
 

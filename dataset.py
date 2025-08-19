@@ -183,10 +183,10 @@ class StreetHazardDatasetTriplet(Dataset):
         return image, segmentation, (anchor_idx, positive_idx, negative_idx)
 
 
-class PadToMultipleOf14:
+class PadToMultipleOf16:
     """
-    Simple padding to make the image dimensions multiple of 14.
-    That's because DinoV2 requires the image dimensions to be multiple of 14.
+    Simple padding to make the image dimensions multiple of 16.
+    That's because DinoV2 requires the image dimensions to be multiple of 16.
     """
 
     def __init__(self, fill=0):
@@ -196,8 +196,8 @@ class PadToMultipleOf14:
         # Get image dimensions (assumes input is a PIL image)
         width, height = image.size
         # Calculate the new dimensions
-        new_width = ((width + 13) // 14) * 14
-        new_height = ((height + 13) // 14) * 14
+        new_width = ((width + 15) // 16) * 16
+        new_height = ((height + 15) // 16) * 16
         # Calculate padding amounts
         pad_left = 0
         pad_top = 0
@@ -208,6 +208,6 @@ class PadToMultipleOf14:
 
     def convert_dims(self, size):
         width, height = size
-        new_width = ((width + 13) // 14) * 14
-        new_height = ((height + 13) // 14) * 14
+        new_width = ((width + 15) // 16) * 16
+        new_height = ((height + 15) // 16) * 16
         return new_width, new_height

@@ -2,13 +2,14 @@ import torch
 import torch.nn as nn
 from tqdm.auto import tqdm
 from _model import DINOv2_SemanticSegmentation
+from model_new import DinoMetricLearning
 from torch.utils.data import DataLoader
-from plot import plot_semantic_segmentation
+from plot import plot_semantic_segmentation, semantic_embeddings_plot
 from torch.utils.tensorboard import SummaryWriter
 
 
 def train_semantic_segmentation(
-    model: DINOv2_SemanticSegmentation,
+    model: nn.Module,
     criterion: nn.Module,
     dl_train: DataLoader,
     dl_val: DataLoader,  # Add validation DataLoader
@@ -46,7 +47,7 @@ def train_semantic_segmentation(
             writer.add_scalar("Train/Loss", loss.item(), global_step)
             global_step += 1
 
-            if i % 100 == 0:
+            if i % plot_interval == 0:
                 print(f"Epoch {epoch}/{epochs} - {loss.item()}")
                 plot_semantic_segmentation(images[0], logits[0], segmentations[0])
 
@@ -78,7 +79,71 @@ def train_semantic_segmentation(
             f"Epoch {epoch}/{epochs} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f}"
         )
 
-        if (epoch + 1) % plot_interval == 0:
-            plot_semantic_segmentation(images[0], logits[0], segmentations[0])
-
     writer.close()
+
+
+def train_metric_learning(
+    model: nn.Module,
+    criterion: nn.Module,
+    dl_train: DataLoader,
+    dl_val: DataLoader,  # Add validation DataLoader
+    device: torch.device,
+    epochs: int,
+    optimizer: torch.optim.Optimizer,
+    plot_interval: int = 1,
+    log_dir: str = "./runs",  # TensorBoard log directory
+):
+    writer = SummaryWriter(log_dir)
+    global_step = 0
+
+    for epoch in range(epochs):
+        model.train()
+        running_train_loss = 0.0
+        for i, (images, segmentations, (selected_pixels, target_matrix)) in tqdm(
+            enumerate(dl_train)
+        ):
+            images = images.to(device)
+            segmentations = segmentations.to(device)
+            selected_pixels = selected_pixels.to(device)
+            target_matrix = target_matrix.to(device)
+
+            embeddings = model(images)
+
+            loss = criterion(embeddings, selected_pixels, target_matrix)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            running_train_loss += loss.item()
+            writer.add_scalar("Train/Loss", loss.item(), global_step)
+            global_step += 1
+
+            if i % plot_interval == 0:
+                print(f"Epoch {epoch}/{epochs} - {loss.item()}")
+                semantic_embeddings_plot(
+                    model, dl_train, num_points=1000, device=device
+                )
+
+        avg_train_loss = running_train_loss / len(dl_train)
+        writer.add_scalar("Train/Avg_Loss", avg_train_loss, epoch)
+
+        # Validation
+        model.eval()
+        running_val_loss = 0.0
+        with torch.no_grad():
+            for images, segmentations, (selected_pixels, target_matrix) in dl_val:
+                images = images.to(device)
+                segmentations = segmentations.to(device)
+                selected_pixels = selected_pixels.to(device)
+                target_matrix = target_matrix.to(device)
+
+                embeddings = model(images)
+                loss = criterion(embeddings, selected_pixels, target_matrix)
+                running_val_loss += loss.item()
+
+        avg_val_loss = running_val_loss / len(dl_val)
+        writer.add_scalar("Val/Loss", avg_val_loss, epoch)
+
+        print(
+            f"Epoch {epoch}/{epochs} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f}"
+        )
