@@ -215,6 +215,7 @@ class DinoUpsampling(nn.Module):
         feats = self.dino(x)
         print(feats.shape)
         feats = F.interpolate(feats, size=(H, W), mode="bilinear", align_corners=False)
+        print(feats.shape)
 
         # Apply fully connected layers
         feats = self.fc(feats)
