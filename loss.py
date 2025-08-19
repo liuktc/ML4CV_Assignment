@@ -158,8 +158,8 @@ class Proxy_Anchor(torch.nn.Module):
         # X: (C, B*H*W)
         # labels: (B*H*W)
         print(X.shape)
-        X = X.view(X.size(1), -1)
-        labels = labels.view(-1)
+        X = X.reshape(X.size(1), -1)
+        labels = labels.reshape(-1)
 
         X, labels = sample_pixels_per_class(X, labels, self.num_pixels_per_class)
 
