@@ -149,6 +149,7 @@ class Proxy_Anchor(torch.nn.Module):
         self.mrg = mrg
         self.alpha = alpha
         self.num_pixels_per_class = num_pixels_per_class
+        self.device = device
 
     def forward(self, X, labels, **kwargs):
         # X: (B, C, H, W)
@@ -178,12 +179,12 @@ class Proxy_Anchor(torch.nn.Module):
         )  # The set of positive proxies of data in the batch
         num_valid_proxies = len(with_pos_proxies)  # The number of positive proxies
 
-        P_sim_sum = torch.where(P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp)).sum(
-            dim=0
-        )
-        N_sim_sum = torch.where(N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp)).sum(
-            dim=0
-        )
+        P_sim_sum = torch.where(
+            P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp).to(self.device)
+        ).sum(dim=0)
+        N_sim_sum = torch.where(
+            N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp).to(self.device)
+        ).sum(dim=0)
 
         pos_term = torch.log(1 + P_sim_sum).sum() / num_valid_proxies
         neg_term = torch.log(1 + N_sim_sum).sum() / self.num_classes
