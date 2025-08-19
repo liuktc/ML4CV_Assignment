@@ -198,6 +198,7 @@ class DinoSegmentation(nn.Module):
 
 class DinoUpsampling(nn.Module):
     def __init__(self, dino_model, out_dim=512):
+        super().__init__()
         self.dino = dino_model
         # Freeze DINO parameters
         for param in self.dino.parameters():
