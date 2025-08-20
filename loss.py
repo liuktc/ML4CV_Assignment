@@ -127,8 +127,9 @@ class Proxy_Anchor(torch.nn.Module):
         num_classes,
         embedding_size,
         num_pixels_per_class=10,
-        mrg=0.1,
+        margin=0.1,
         alpha=32,
+        class_weights=None,
         device="cpu",
     ):
         torch.nn.Module.__init__(self)
@@ -146,10 +147,17 @@ class Proxy_Anchor(torch.nn.Module):
 
         self.num_classes = num_classes
         self.embedding_size = embedding_size
-        self.mrg = mrg
+        self.margin = margin
         self.alpha = alpha
         self.num_pixels_per_class = num_pixels_per_class
         self.device = device
+
+        if class_weights is not None:
+            self.class_weights = torch.tensor(
+                class_weights, device=device, dtype=torch.float32
+            )
+        else:
+            self.class_weights = torch.ones(num_classes, device=device)
 
     def forward(self, X, labels, **kwargs):
         # X: (B, C, H, W)
@@ -171,8 +179,8 @@ class Proxy_Anchor(torch.nn.Module):
         P_one_hot = binarize(T=labels, num_classes=self.num_classes).to(self.device)
         N_one_hot = 1 - P_one_hot
 
-        pos_exp = torch.exp(-self.alpha * (cos - self.mrg)).to(self.device)
-        neg_exp = torch.exp(self.alpha * (cos + self.mrg)).to(self.device)
+        pos_exp = torch.exp(-self.alpha * (cos - self.margin)).to(self.device)
+        neg_exp = torch.exp(self.alpha * (cos + self.margin)).to(self.device)
 
         with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(
             dim=1
@@ -186,8 +194,12 @@ class Proxy_Anchor(torch.nn.Module):
             N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp).to(self.device)
         ).sum(dim=0)
 
-        pos_term = torch.log(1 + P_sim_sum).sum() / num_valid_proxies
-        neg_term = torch.log(1 + N_sim_sum).sum() / self.num_classes
+        pos_term = (
+            torch.log(1 + P_sim_sum) * self.class_weights
+        ).sum() / num_valid_proxies
+        neg_term = (
+            torch.log(1 + N_sim_sum) * self.class_weights
+        ).sum() / self.num_classes
         loss = pos_term + neg_term
 
         return loss

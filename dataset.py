@@ -1,11 +1,14 @@
 import os
 import json
+from sklearn.base import defaultdict
 import torch
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms.functional import pad
 import random
+
+from tqdm.auto import tqdm
 
 
 class StreetHazardDataset(Dataset):
@@ -244,3 +247,17 @@ def sample_pixels_per_class(X, labels, num_samples_per_class):
     return torch.cat(sampled_pixels, dim=1), torch.tensor(
         sampled_labels, dtype=torch.long
     )
+
+
+def compute_class_frequency(dataloader, num_samples_per_class=10):
+    class_counts = torch.zeros(13, dtype=torch.int64)  # Assuming 13 classes (0-12)
+    for images, segmentations, _ in tqdm(dataloader, total=len(dataloader)):
+        X = images.reshape(images.size(1), -1)
+        labels = segmentations.reshape(-1)
+        sampled_pixels, sampled_labels = sample_pixels_per_class(
+            X, labels, num_samples_per_class
+        )
+        for label in sampled_labels:
+            class_counts[label.item()] += 1
+
+    return class_counts / class_counts.sum()
