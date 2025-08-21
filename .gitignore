@@ -4,3 +4,5 @@ __pycache__
 venv
 dinov3
 runs
+
+*.ckpt
