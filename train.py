@@ -1,11 +1,12 @@
 import torch
 import torch.nn as nn
 from tqdm.auto import tqdm
-from _model import DINOv2_SemanticSegmentation
-from model_new import DinoMetricLearning
 from torch.utils.data import DataLoader
 from plot import plot_semantic_segmentation, semantic_embeddings_plot
 from torch.utils.tensorboard import SummaryWriter
+from dataset import sample_pixels_per_class
+from model_new import OutlierDetector
+from metrics import outlier_detection_roc_auc
 
 
 def train_semantic_segmentation(
@@ -86,13 +87,18 @@ def train_metric_learning(
     model: nn.Module,
     criterion: nn.Module,
     dl_train: DataLoader,
+    dl_train_small: DataLoader,  # Small subset of training data for metrics
     dl_val: DataLoader,  # Add validation DataLoader
+    test_dataset: DataLoader,  # Dataset for computing test metrics !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     device: torch.device,
     epochs: int,
     optimizer: torch.optim.Optimizer,
+    mining_func=None,
     plot_interval: int = 1,
+    metric_interval: int = 100,  # Interval (in batches) to compute test metrics
     log_dir: str = "./runs",  # TensorBoard log directory
     print_loss: bool = False,
+    num_classes: int = 13,
 ):
     writer = SummaryWriter(log_dir)
     global_step = 0
@@ -101,7 +107,7 @@ def train_metric_learning(
         model.train()
         running_train_loss = 0.0
         for i, (images, segmentations, (selected_pixels, target_matrix)) in tqdm(
-            enumerate(dl_train)
+            enumerate(dl_train), total=len(dl_train)
         ):
             images = images.to(device)
             segmentations = segmentations.to(device)
@@ -109,13 +115,25 @@ def train_metric_learning(
             target_matrix = target_matrix.to(device)
 
             embeddings = model(images)
+            # Segmentations : BxHxW
+            # Embeddings : BxDxHxW
+            # Reshape embeddings to (B*H*W) x D
+            B, D, H, W = embeddings.shape
+            embeddings = embeddings.permute(0, 2, 3, 1).reshape(B * H * W, D)
+            # Reshape segmentations to (B*H*W)
+            labels = segmentations.view(B * H * W)
 
-            loss = criterion(
-                X=embeddings,
-                labels=segmentations,
-                selected_pixels=selected_pixels,
-                target_matrix=target_matrix,
+            embeddings, labels = sample_pixels_per_class(
+                embeddings, labels, num_samples_per_class=50
             )
+
+            if mining_func is None:
+                indices_tuple = None
+            else:
+                indices_tuple = mining_func(embeddings, labels)
+
+            loss = criterion(embeddings, labels, indices_tuple)
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -130,30 +148,60 @@ def train_metric_learning(
 
             if i % plot_interval == 0:
                 print(f"Epoch {epoch}/{epochs} - {loss.item()}")
-                semantic_embeddings_plot(
-                    model, dl_train, num_points=1000, device=device
+                image = semantic_embeddings_plot(
+                    model, dl_train, num_points=3000, device=device
+                )
+                writer.add_image(
+                    "Train/Semantic Embeddings",
+                    image,
+                    global_step=global_step,
                 )
 
+            if i % metric_interval == 0 and i > 0:
+                # Compute test metrics
+                detector = OutlierDetector(
+                    model,
+                    num_classes=num_classes,
+                    train_dataloader=dl_train_small,
+                    device=device,
+                    num_samples_per_class=512,
+                    pca_dim=128,
+                )
+
+                # Compute the metric over 5 random test images
+                scores = []
+                test_indices = torch.randperm(len(test_dataset))[:5]
+                for idx in tqdm(test_indices, desc="Computing test metrics"):
+                    test_image, test_segmentation, _ = test_dataset[idx]
+                    outliers_map = detector(test_image.unsqueeze(0).to(device))
+                    outliers_gt = (test_segmentation == 13).int()
+                    score = outlier_detection_roc_auc(outliers_gt, outliers_map)
+                    scores.append(score)
+                mean_score = sum(scores) / len(scores)
+                writer.add_scalar("Test/Outlier_ROC_AUC", mean_score, global_step)
+                print(f"Test Outlier ROC AUC: {mean_score}")
+
         avg_train_loss = running_train_loss / len(dl_train)
-        writer.add_scalar("Train/Avg_Loss", avg_train_loss, epoch)
+        # torch.save(model.state_dict(), f"metric_learning_epoch_{epoch}.pth")
+        # writer.add_scalar("Train/Avg_Loss", avg_train_loss, epoch)
 
-        # Validation
-        model.eval()
-        running_val_loss = 0.0
-        with torch.no_grad():
-            for images, segmentations, (selected_pixels, target_matrix) in dl_val:
-                images = images.to(device)
-                segmentations = segmentations.to(device)
-                selected_pixels = selected_pixels.to(device)
-                target_matrix = target_matrix.to(device)
+        # # Validation
+        # model.eval()
+        # running_val_loss = 0.0
+        # with torch.no_grad():
+        #     for images, segmentations, (selected_pixels, target_matrix) in dl_val:
+        #         images = images.to(device)
+        #         segmentations = segmentations.to(device)
+        #         selected_pixels = selected_pixels.to(device)
+        #         target_matrix = target_matrix.to(device)
 
-                embeddings = model(images)
-                loss = criterion(embeddings, selected_pixels, target_matrix)
-                running_val_loss += loss.item()
+        #         embeddings = model(images)
+        #         loss = criterion(embeddings, selected_pixels, target_matrix)
+        #         running_val_loss += loss.item()
 
-        avg_val_loss = running_val_loss / len(dl_val)
-        writer.add_scalar("Val/Loss", avg_val_loss, epoch)
+        # avg_val_loss = running_val_loss / len(dl_val)
+        # writer.add_scalar("Val/Loss", avg_val_loss, epoch)
 
-        print(
-            f"Epoch {epoch}/{epochs} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f}"
-        )
+        # print(
+        #     f"Epoch {epoch}/{epochs} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f}"
+        # )

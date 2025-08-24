@@ -221,7 +221,7 @@ def sample_pixels_per_class(X, labels, num_samples_per_class):
     Sample a fixed number of pixels per class from the segmentation labels.
 
     Args:
-        X (torch.Tensor): Input tensor of shape (D, N).
+        X (torch.Tensor): Input tensor of shape (N, D).
         labels (torch.Tensor): Segmentation labels of shape (N, ).
         num_samples_per_class (int): Number of pixels to sample per class.
     Returns:
@@ -236,21 +236,22 @@ def sample_pixels_per_class(X, labels, num_samples_per_class):
             continue
 
         mask = labels == c
-        pixels = X[:, mask]
-        if pixels.size(1) > num_samples_per_class:
-            indices = torch.randperm(pixels.size(1))[:num_samples_per_class]
-            pixels = pixels[:, indices]
+        pixels = X[mask]  # shape: (num_pixels_c, D)
+        if pixels.size(0) > num_samples_per_class:
+            indices = torch.randperm(pixels.size(0))[:num_samples_per_class]
+            pixels = pixels[indices]
 
         sampled_pixels.append(pixels)
-        sampled_labels.extend([c] * pixels.size(1))
+        sampled_labels.extend([c] * pixels.size(0))
 
-    return torch.cat(sampled_pixels, dim=1), torch.tensor(
+    return torch.cat(sampled_pixels, dim=0), torch.tensor(
         sampled_labels, dtype=torch.long
     )
 
 
-def compute_class_frequency(dataloader, num_samples_per_class=10):
+def compute_class_frequency(dataloader, num_samples_per_class=10, num_images=1000):
     class_counts = torch.zeros(13, dtype=torch.int64)  # Assuming 13 classes (0-12)
+    n = 0
     for images, segmentations, _ in tqdm(dataloader, total=len(dataloader)):
         X = images.reshape(images.size(1), -1)
         labels = segmentations.reshape(-1)
@@ -259,5 +260,9 @@ def compute_class_frequency(dataloader, num_samples_per_class=10):
         )
         for label in sampled_labels:
             class_counts[label.item()] += 1
+
+        n += 1
+        if n >= num_images:
+            break
 
     return class_counts / class_counts.sum()

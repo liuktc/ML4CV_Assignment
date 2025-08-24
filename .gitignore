@@ -2,7 +2,13 @@ data
 __pycache__
 *.pth
 venv
-dinov3
+.venv
+./dinov3
 runs
 
 *.ckpt
+
+bowling*
+
+.vscode
+ML4CV_Assignment

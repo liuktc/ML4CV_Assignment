@@ -99,7 +99,6 @@ def binarize(T, num_classes):
     import sklearn.preprocessing
 
     T = sklearn.preprocessing.label_binarize(T, classes=range(0, num_classes))
-    print(device)
     # if device == "cpu":
     if device == torch.device("cpu"):
         T = torch.FloatTensor(T)
@@ -121,7 +120,7 @@ def l2_norm(input):
 from dataset import sample_pixels_per_class
 
 
-class Proxy_Anchor(torch.nn.Module):
+class Proxy_Anchor(nn.Module):
     def __init__(
         self,
         num_classes,
@@ -130,20 +129,12 @@ class Proxy_Anchor(torch.nn.Module):
         margin=0.1,
         alpha=32,
         class_weights=None,
+        use_aux_ce=False,
         device="cpu",
     ):
-        torch.nn.Module.__init__(self)
-        # Proxy Anchor Initialization
-        if device == torch.device("cpu"):
-            self.proxies = torch.nn.Parameter(torch.randn(num_classes, embedding_size))
-        else:
-            self.proxies = torch.nn.Parameter(
-                torch.randn(num_classes, embedding_size).cuda()
-            )
-
-        # nn.init.kaiming_normal_(self.proxies, mode="fan_out")
-        # Manually normalize the proxies right after initialization
-        self.proxies.data = torch.nn.functional.normalize(self.proxies.data, p=2, dim=1)
+        super().__init__()
+        # Proxies: (num_classes, embedding_size)
+        self.proxies = nn.Parameter(torch.randn(num_classes, embedding_size))
 
         self.num_classes = num_classes
         self.embedding_size = embedding_size
@@ -151,6 +142,7 @@ class Proxy_Anchor(torch.nn.Module):
         self.alpha = alpha
         self.num_pixels_per_class = num_pixels_per_class
         self.device = device
+        self.use_aux_ce = use_aux_ce
 
         if class_weights is not None:
             self.class_weights = torch.tensor(
@@ -159,48 +151,75 @@ class Proxy_Anchor(torch.nn.Module):
         else:
             self.class_weights = torch.ones(num_classes, device=device)
 
+        if use_aux_ce:
+            self.classifier = nn.Linear(embedding_size, num_classes).to(device)
+
     def forward(self, X, labels, **kwargs):
-        # X: (B, C, H, W)
-        # labels: (B, H, W)
+        """
+        Args:
+            X: (B, C, H, W) pixel embeddings
+            labels: (B, H, W) pixel labels
+        """
+        # Flatten
+        X = X.reshape(X.size(1), -1)  # (C, B*H*W)
+        labels = labels.reshape(-1)  # (B*H*W,)
 
-        # Make:
-        # X: (C, B*H*W)
-        # labels: (B*H*W)
-        print(X.shape)
-        X = X.reshape(X.size(1), -1)
-        labels = labels.reshape(-1)
-
+        # Sample pixels per class
         X, labels = sample_pixels_per_class(X, labels, self.num_pixels_per_class)
 
-        # Pick num_pixels random pixels
-        P = self.proxies
+        # Normalize features + proxies each forward
+        X = F.normalize(X.T, p=2, dim=1).to(self.device)  # (N, C)
+        P = F.normalize(self.proxies, p=2, dim=1).to(self.device)  # (num_classes, C)
 
-        cos = F.linear(l2_norm(X.T), l2_norm(P))  # Calcluate cosine similarity
+        # Cosine similarity: (N, num_classes)
+        cos = F.linear(X, P)
+
+        # One-hot for labels
         P_one_hot = binarize(T=labels, num_classes=self.num_classes).to(self.device)
         N_one_hot = 1 - P_one_hot
 
-        pos_exp = torch.exp(-self.alpha * (cos - self.margin)).to(self.device)
-        neg_exp = torch.exp(self.alpha * (cos + self.margin)).to(self.device)
+        # Positive & negative exponentials
+        pos_exp = torch.exp(-self.alpha * (cos - self.margin))
+        neg_exp = torch.exp(self.alpha * (cos + self.margin))
 
-        with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(
-            dim=1
-        )  # The set of positive proxies of data in the batch
-        num_valid_proxies = len(with_pos_proxies)  # The number of positive proxies
+        # Masked sums
+        P_sim_sum = torch.where(P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp)).sum(
+            dim=0
+        )
+        N_sim_sum = torch.where(N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp)).sum(
+            dim=0
+        )
 
-        P_sim_sum = torch.where(
-            P_one_hot == 1, pos_exp, torch.zeros_like(pos_exp).to(self.device)
-        ).sum(dim=0)
-        N_sim_sum = torch.where(
-            N_one_hot == 1, neg_exp, torch.zeros_like(neg_exp).to(self.device)
-        ).sum(dim=0)
+        # Only consider proxies with positives in this batch
+        with_pos_proxies = torch.nonzero(P_one_hot.sum(dim=0) != 0).squeeze(dim=1)
+        num_valid_proxies = len(with_pos_proxies)
 
+        if num_valid_proxies == 0:
+            # No valid positive proxies in this batch → return 0
+            return torch.tensor(0.0, device=self.device, requires_grad=True)
+
+        # Positive loss term
         pos_term = (
-            torch.log(1 + P_sim_sum) * self.class_weights
+            torch.log1p(P_sim_sum[with_pos_proxies])
+            * self.class_weights[with_pos_proxies]
         ).sum() / num_valid_proxies
+
+        # Negative loss term: average only over valid proxies
         neg_term = (
-            torch.log(1 + N_sim_sum) * self.class_weights
-        ).sum() / self.num_classes
-        loss = pos_term + neg_term
+            torch.log1p(N_sim_sum[with_pos_proxies])
+            * self.class_weights[with_pos_proxies]
+        ).sum() / num_valid_proxies
+
+        proxy_anchor_loss = pos_term + neg_term
+
+        # Optional auxiliary CE loss (stabilizes training)
+        if self.use_aux_ce:
+            logits = self.classifier(X).to(self.device)  # (N, num_classes)
+            labels = labels.to(self.device)  # (N,)
+            ce_loss = F.cross_entropy(logits, labels, weight=self.class_weights)
+            loss = proxy_anchor_loss + ce_loss
+        else:
+            loss = proxy_anchor_loss
 
         return loss
 
@@ -331,3 +350,21 @@ class MagnetLoss(nn.Module):
 
         self.epoch_counter += 1
         return loss.mean()
+
+
+# Loss is computed as the norm of the vectors.
+# Push all the embeddings to the origin.
+class OriginPushLoss(nn.Module):
+    def __init__(self):
+        super(OriginPushLoss, self).__init__()
+
+    def forward(self, X, **kwargs):
+        """
+        Args:
+            X: (B, C, H, W) pixel embeddings
+        """
+        # Flatten
+        X = X.reshape(X.size(1), -1)  # (C, B*H*W)
+
+        loss = torch.norm(X, dim=1).mean()
+        return loss

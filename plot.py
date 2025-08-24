@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 import torch
 import torch.nn.functional as F
 import numpy as np
+import io
 
 from PIL import Image
 
@@ -68,10 +69,10 @@ def semantic_embeddings_plot(model, dl, num_points: int = 100, device: str = "cp
     for images, segmentations, _ in dl:
         image = images[0].to(device)
         segmentation = segmentations[0].cpu()
-        plt.imshow(image.permute(1, 2, 0).cpu())
-        plt.show()
-        plt.imshow(color(segmentation.cpu()))
-        plt.show()
+        # plt.imshow(image.permute(1, 2, 0).cpu())
+        # plt.show()
+        # plt.imshow(color(segmentation.cpu()))
+        # plt.show()
 
         out = model(image[None, ...])
         # Apply PCA on the channel dimension of the output embeddings
@@ -80,17 +81,13 @@ def semantic_embeddings_plot(model, dl, num_points: int = 100, device: str = "cp
         C, H, W = out.shape
         out = torch.permute(out, (1, 2, 0))
         out = out.view(-1, out.size(-1))
-        print(out.shape)
         pca_out = pca.fit_transform(out.cpu().detach().numpy())
         pca_out = pca_out.reshape(H, W, 2)
-        print(pca_out.shape)
 
-        # Pick 1000 random pixels
-        selected_pixels_x = torch.randperm(H)[:num_points].cpu()
-        selected_pixels_y = torch.randperm(W)[:num_points].cpu()
+        # Sample num_points ranging from 0 to H-1
+        selected_pixels_x = torch.randint(0, H, (num_points,)).cpu().numpy()
+        selected_pixels_y = torch.randint(0, W, (num_points,)).cpu().numpy()
         different_segmentation_values = torch.unique(segmentation)
-
-        print(different_segmentation_values)
 
         for i in range(len(different_segmentation_values)):
             plt.scatter(
@@ -107,8 +104,19 @@ def semantic_embeddings_plot(model, dl, num_points: int = 100, device: str = "cp
                 label=different_segmentation_values[i].item(),
             )
         plt.legend()
-        plt.show()
-        break
+        # plt.show()
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png")
+        buf.seek(0)
+        plt.close()
+
+        image_from_plot = Image.open(buf)
+        image = np.array(image_from_plot)
+        image = torch.tensor(image).permute(2, 0, 1)  # Convert to (C, H, W)
+
+        # Plot using the tensorboard logger, extract the image from the plot
+
+        return image
 
 
 def plot_semantic_segmentation(image, predicted, gt):
