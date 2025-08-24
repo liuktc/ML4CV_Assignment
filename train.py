@@ -9,6 +9,29 @@ from model_new import OutlierDetector
 from metrics import outlier_detection_roc_auc
 
 
+class EarlyStopping:
+    def __init__(self, patience=5, min_delta=0, save_path=None):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.best_loss = float("inf")
+        self.counter = 0
+        self.early_stop = False
+        self.save_path = save_path
+        self.best_state_dict = None
+
+    def __call__(self, val_loss, model=None):
+        if val_loss < self.best_loss - self.min_delta:
+            self.best_loss = val_loss
+            self.counter = 0
+            if model is not None and self.save_path is not None:
+                torch.save(model.state_dict(), self.save_path)
+                self.best_state_dict = model.state_dict()
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+
+
 def train_semantic_segmentation(
     model: nn.Module,
     criterion: nn.Module,
@@ -88,7 +111,6 @@ def train_metric_learning(
     criterion: nn.Module,
     dl_train: DataLoader,
     dl_train_small: DataLoader,  # Small subset of training data for metrics
-    dl_val: DataLoader,  # Add validation DataLoader
     test_dataset: DataLoader,  # Dataset for computing test metrics !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     device: torch.device,
     epochs: int,
@@ -99,9 +121,11 @@ def train_metric_learning(
     log_dir: str = "./runs",  # TensorBoard log directory
     print_loss: bool = False,
     num_classes: int = 13,
+    save_path: str = "metric_learning_model.pth",  # Path to save the best model
 ):
     writer = SummaryWriter(log_dir)
     global_step = 0
+    early_stopping = EarlyStopping(patience=5, min_delta=0.001, save_path=save_path)
 
     for epoch in range(epochs):
         model.train()
@@ -156,6 +180,12 @@ def train_metric_learning(
                     image,
                     global_step=global_step,
                 )
+                avg_train_loss = running_train_loss / (i + 1)
+                early_stopping(avg_train_loss, model)
+                if early_stopping.early_stop:
+                    print("Early stopping triggered")
+                    writer.close()
+                    return
 
             if i % metric_interval == 0 and i > 0:
                 # Compute test metrics
@@ -182,26 +212,3 @@ def train_metric_learning(
                 print(f"Test Outlier ROC AUC: {mean_score}")
 
         avg_train_loss = running_train_loss / len(dl_train)
-        # torch.save(model.state_dict(), f"metric_learning_epoch_{epoch}.pth")
-        # writer.add_scalar("Train/Avg_Loss", avg_train_loss, epoch)
-
-        # # Validation
-        # model.eval()
-        # running_val_loss = 0.0
-        # with torch.no_grad():
-        #     for images, segmentations, (selected_pixels, target_matrix) in dl_val:
-        #         images = images.to(device)
-        #         segmentations = segmentations.to(device)
-        #         selected_pixels = selected_pixels.to(device)
-        #         target_matrix = target_matrix.to(device)
-
-        #         embeddings = model(images)
-        #         loss = criterion(embeddings, selected_pixels, target_matrix)
-        #         running_val_loss += loss.item()
-
-        # avg_val_loss = running_val_loss / len(dl_val)
-        # writer.add_scalar("Val/Loss", avg_val_loss, epoch)
-
-        # print(
-        #     f"Epoch {epoch}/{epochs} - Train Loss: {avg_train_loss:.4f} - Val Loss: {avg_val_loss:.4f}"
-        # )
