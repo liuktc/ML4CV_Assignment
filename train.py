@@ -302,6 +302,7 @@ def train_metric_learning(
 
                     grid = torch.cat(rows, dim=1)  # stack rows vertically
                     # grid = grid.unsqueeze(0).detach()
+                    print("Grid shape = ", grid.shape)
                     writer.add_image("Test/Results", grid, global_step=global_step)
 
                     for key in scores:
