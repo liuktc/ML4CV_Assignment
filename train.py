@@ -149,7 +149,6 @@ def train_metric_learning(
             embeddings, labels = sample_pixels_per_class(
                 embeddings, labels, num_samples_per_class=pixel_per_class
             )
-            print(embeddings.shape, labels.shape)
 
             if mining_func is None:
                 indices_tuple = None
@@ -223,7 +222,6 @@ def train_metric_learning(
                     for idx in tqdm(test_indices, desc="Computing test metrics"):
                         test_image, test_segmentation = test_dataset[idx]
                         # Print unique values in test_segmentation
-                        print(torch.unique(test_segmentation))
                         outliers_map = detector(test_image.unsqueeze(0).to(device))
                         outliers_gt = (test_segmentation == 13).int()
 
@@ -232,7 +230,6 @@ def train_metric_learning(
                         predicted_segmentation = (
                             torch.argmax(test_logits, dim=1).squeeze(0).detach().cpu()
                         )
-                        print(torch.unique(predicted_segmentation))
 
                         unnormalized_image = test_image * torch.tensor(
                             [0.229, 0.224, 0.225]
@@ -246,7 +243,7 @@ def train_metric_learning(
                         )
                         outliers_map_img = (outliers_map_img * 255).astype("uint8")
                         outliers_map_img = cv2.applyColorMap(
-                            outliers_map_img, cv2.COLORMAP_JET
+                            outliers_map_img, cv2.COLORMAP_MAGMA
                         )
                         outliers_map_img = torch.tensor(outliers_map_img).permute(
                             2, 0, 1
@@ -254,21 +251,6 @@ def train_metric_learning(
                         outliers_map_img = outliers_map_img.to(device)
                         outliers_map_img = outliers_map_img.float() / 255.0
 
-                        A = unnormalized_image[0]
-                        B = (
-                            torch.Tensor(color(test_segmentation, return_array=True))
-                            .to(device)
-                            .permute(2, 0, 1)
-                        )
-                        C = (
-                            torch.Tensor(
-                                color(predicted_segmentation, return_array=True)
-                            )
-                            .to(device)
-                            .permute(2, 0, 1)
-                        )
-                        D = outliers_map_img
-                        print(A.shape, B.shape, C.shape, D.shape)
                         rows.append(
                             torch.cat(
                                 [
@@ -303,7 +285,10 @@ def train_metric_learning(
 
                     grid = torch.cat(rows, dim=-2)  # stack rows vertically
                     grid = grid.detach()
-                    print("Grid shape = ", grid.shape)
+                    # Reduce the grid size by 4
+                    grid = torch.nn.functional.interpolate(
+                        grid.unsqueeze(0), scale_factor=0.4, mode="bilinear"
+                    ).squeeze(0)
                     writer.add_image("Test/Results", grid, global_step=global_step)
 
                     for key in scores:
