@@ -139,6 +139,12 @@ parser.add_argument(
     action="store_true",
     help="Whether to run on Kaggle (sets file paths accordingly)",
 )
+parser.add_argument(
+    "--cnn_out_dim",
+    type=int,
+    default=16,
+    help="Output dimension of the CNN in DinoMetricLearning",
+)
 args = parser.parse_args()
 
 DISTANCE = args.distance
@@ -160,6 +166,7 @@ LAMBDA_CE = args.lambda_ce
 SAVE_PATH = args.save_path
 PLOT_INTERVAL = args.plot_interval
 KAGGLE = args.kaggle
+CNN_OUT_DIM = args.cnn_out_dim
 
 if not NORMALIZE_EMBEDDINGS and DISTANCE == "cos":
     print(
@@ -280,7 +287,7 @@ elif MODEL == "DinoMetricLearning":
     feature_extractor = DinoMetricLearning(
         backbone,
         dino_out_dim=None,
-        cnn_out_dim=128,
+        cnn_out_dim=CNN_OUT_DIM,
         out_dim=EMBEDDING_SIZE,
         normalize=NORMALIZE_EMBEDDINGS,
     ).to(device)
