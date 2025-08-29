@@ -134,7 +134,11 @@ parser.add_argument(
     default=500,
     help="Interval (in batches) to plot embeddings and segmentations",
 )
-
+parser.add_argument(
+    "--kaggle",
+    action="store_true",
+    help="Whether to run on Kaggle (sets file paths accordingly)",
+)
 args = parser.parse_args()
 
 DISTANCE = args.distance
@@ -155,6 +159,7 @@ LAMBDA_METRIC = args.lambda_metric
 LAMBDA_CE = args.lambda_ce
 SAVE_PATH = args.save_path
 PLOT_INTERVAL = args.plot_interval
+KAGGLE = args.kaggle
 
 if not NORMALIZE_EMBEDDINGS and DISTANCE == "cos":
     print(
@@ -171,11 +176,18 @@ image_size = PadToMultipleOf16().convert_dims(
 # annotation_test_file = "/home/federico/Downloads/streethazards_test/test/test.odgt"
 # img_dir = "/home/federico/.cache/kagglehub/datasets/lucadome/streethazards-train/versions/1/train/"
 # img_dir_test = "/home/federico/Downloads/streethazards_test/test/"
-annotations_train_file = "./data/train/train.odgt"
-annotation_val_file = "./data/train/validation.odgt"
-annotation_test_file = "./data/test/test.odgt"
-img_dir = "./data/train/"
-img_dir_test = "./data/test/"
+if KAGGLE:
+    annotations_train_file = "/kaggle/input/streethazards-train/train/train.odgt"
+    annotation_val_file = "/kaggle/input/streethazards-train/train/validation.odgt"
+    annotation_test_file = "/kaggle/input/streethazards-test/test/test.odgt"
+    img_dir = "/kaggle/input/streethazards-train/train/"
+    img_dir_test = "/kaggle/input/streethazards-test/test/"
+else:
+    annotations_train_file = "./data/train/train.odgt"
+    annotation_val_file = "./data/train/validation.odgt"
+    annotation_test_file = "./data/test/test.odgt"
+    img_dir = "./data/train/"
+    img_dir_test = "./data/test/"
 
 
 if PREPROCESS == "resize":

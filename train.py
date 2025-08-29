@@ -136,69 +136,69 @@ def train_metric_learning(
         for i, (images, segmentations) in tqdm(
             enumerate(dl_train), total=len(dl_train)
         ):
-            # images = images.to(device)
-            # segmentations = segmentations.to(device)
+            images = images.to(device)
+            segmentations = segmentations.to(device)
 
-            # logits, embeddings = model(images, return_features=True)
+            logits, embeddings = model(images, return_features=True)
 
-            # B, D, H, W = embeddings.shape
-            # embeddings = embeddings.permute(0, 2, 3, 1).reshape(B * H * W, D)
-            # # Reshape segmentations to (B*H*W)
-            # labels = segmentations.view(B * H * W)
+            B, D, H, W = embeddings.shape
+            embeddings = embeddings.permute(0, 2, 3, 1).reshape(B * H * W, D)
+            # Reshape segmentations to (B*H*W)
+            labels = segmentations.view(B * H * W)
 
-            # embeddings, labels = sample_pixels_per_class(
-            #     embeddings, labels, num_samples_per_class=pixel_per_class
-            # )
+            embeddings, labels = sample_pixels_per_class(
+                embeddings, labels, num_samples_per_class=pixel_per_class
+            )
 
-            # if mining_func is None:
-            #     indices_tuple = None
-            # else:
-            #     indices_tuple = mining_func(embeddings, labels)
+            if mining_func is None:
+                indices_tuple = None
+            else:
+                indices_tuple = mining_func(embeddings, labels)
 
-            # # Compute losses
-            # metric_learning_loss_value = metric_learning_loss(
-            #     embeddings, labels, indices_tuple
-            # )
-            # segmentation_loss_value = segmentation_loss(logits, segmentations)
-            # loss = loss_weighting(metric_learning_loss_value, segmentation_loss_value)
+            # Compute losses
+            metric_learning_loss_value = metric_learning_loss(
+                embeddings, labels, indices_tuple
+            )
+            segmentation_loss_value = segmentation_loss(logits, segmentations)
+            loss = loss_weighting(metric_learning_loss_value, segmentation_loss_value)
 
-            # optimizer.zero_grad()
-            # loss.backward()
-            # optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-            # running_train_loss += loss.item()
-            # writer.add_scalar("Train/Loss", loss.item(), global_step)
-            # writer.add_scalar(
-            #     "Train/Metric_Learning_Loss",
-            #     metric_learning_loss_value.item(),
-            #     global_step,
-            # )
-            # writer.add_scalar(
-            #     "Train/Segmentation_Loss", segmentation_loss_value.item(), global_step
-            # )
+            running_train_loss += loss.item()
+            writer.add_scalar("Train/Loss", loss.item(), global_step)
+            writer.add_scalar(
+                "Train/Metric_Learning_Loss",
+                metric_learning_loss_value.item(),
+                global_step,
+            )
+            writer.add_scalar(
+                "Train/Segmentation_Loss", segmentation_loss_value.item(), global_step
+            )
 
-            # if print_loss:
-            #     print(
-            #         f"Epoch {epoch}/{epochs} - Step {global_step} - Loss: {loss.item()}"
-            #     )
-            # global_step += 1
+            if print_loss:
+                print(
+                    f"Epoch {epoch}/{epochs} - Step {global_step} - Loss: {loss.item()}"
+                )
+            global_step += 1
 
             if i % plot_interval == 0:
-                # print(f"Epoch {epoch}/{epochs} - {loss.item()}")
-                # image = semantic_embeddings_plot(
-                #     model, dl_train, num_points=3000, device=device
-                # )
-                # writer.add_image(
-                #     "Train/Semantic Embeddings",
-                #     image,
-                #     global_step=global_step,
-                # )
-                # avg_train_loss = running_train_loss / (i + 1)
-                # early_stopping(avg_train_loss, model)
-                # if early_stopping.early_stop:
-                #     print("Early stopping triggered")
-                #     writer.close()
-                #     return
+                print(f"Epoch {epoch}/{epochs} - {loss.item()}")
+                image = semantic_embeddings_plot(
+                    model, dl_train, num_points=3000, device=device
+                )
+                writer.add_image(
+                    "Train/Semantic Embeddings",
+                    image,
+                    global_step=global_step,
+                )
+                avg_train_loss = running_train_loss / (i + 1)
+                early_stopping(avg_train_loss, model)
+                if early_stopping.early_stop:
+                    print("Early stopping triggered")
+                    writer.close()
+                    return
 
                 # if i % metric_interval == 0 and i > 0:
                 # Compute test metrics
@@ -304,7 +304,5 @@ def train_metric_learning(
                     )
 
                     print(f"{key} mean: {mean_score} ± {std_score}")
-
-                return
 
         avg_train_loss = running_train_loss / len(dl_train)
