@@ -149,6 +149,7 @@ def train_metric_learning(
             embeddings, labels = sample_pixels_per_class(
                 embeddings, labels, num_samples_per_class=pixel_per_class
             )
+            print(embeddings.shape, labels.shape)
 
             if mining_func is None:
                 indices_tuple = None
