@@ -284,7 +284,8 @@ def train_metric_learning(
                                     .to(device)
                                     .permute(2, 0, 1),
                                     outliers_map_img,
-                                ]
+                                ],
+                                dim=-1,
                             )
                         )
 
@@ -300,8 +301,8 @@ def train_metric_learning(
                         scores["AUPR"].append(aupr)
                         scores["mIoU"].append(miou)
 
-                    grid = torch.cat(rows, dim=1)  # stack rows vertically
-                    # grid = grid.unsqueeze(0).detach()
+                    grid = torch.cat(rows, dim=-2)  # stack rows vertically
+                    grid = grid.unsqueeze(0).detach()
                     print("Grid shape = ", grid.shape)
                     writer.add_image("Test/Results", grid, global_step=global_step)
 
