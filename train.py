@@ -229,9 +229,9 @@ def train_metric_learning(
 
                         test_image = test_image.to(device).unsqueeze(0)
                         test_logits = model(test_image)
-                        predicted_segmentation = torch.argmax(
-                            test_logits, dim=1
-                        ).squeeze(0)
+                        predicted_segmentation = (
+                            torch.argmax(test_logits, dim=1).squeeze(0).detach().cpu()
+                        )
                         print(torch.unique(predicted_segmentation))
 
                         unnormalized_image = test_image * torch.tensor(
