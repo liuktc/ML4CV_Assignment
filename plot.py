@@ -52,7 +52,7 @@ def color(
     for index, color in enumerate(colors):
         img_new[annotated_image == index] = color
     if return_array:
-        return img_new
+        return img_new / 255.0
     else:
         return Image.fromarray(img_new, "RGB")
 
