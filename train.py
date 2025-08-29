@@ -185,125 +185,132 @@ def train_metric_learning(
             global_step += 1
 
             if i % plot_interval == 0:
-                print(f"Epoch {epoch}/{epochs} - {loss.item()}")
-                image = semantic_embeddings_plot(
-                    model, dl_train, num_points=3000, device=device
-                )
-                writer.add_image(
-                    "Train/Semantic Embeddings",
-                    image,
-                    global_step=global_step,
-                )
-                avg_train_loss = running_train_loss / (i + 1)
-                early_stopping(avg_train_loss, model)
-                if early_stopping.early_stop:
-                    print("Early stopping triggered")
-                    writer.close()
-                    return
-
-                # if i % metric_interval == 0 and i > 0:
-                # Compute test metrics
-                detector = EnergyBasedOutlierDetector(
-                    model, temperature=1, device=device
-                )
-                # detector = OutlierDetector(
-                #     model,
-                #     num_classes=num_classes,
-                #     train_dataloader=dl_train_small,
-                #     device=device,
-                #     num_samples_per_class=512,
-                #     pca_dim=128,
-                # )
-
-                # Compute the metric over 10 random test images
-                scores = {"AUPR": [], "mIoU": []}
-                test_indices = torch.randperm(len(test_dataset))[:2]
-                rows = []
-                for idx in tqdm(test_indices, desc="Computing test metrics"):
-                    test_image, test_segmentation = test_dataset[idx]
-                    # Print unique values in test_segmentation
-                    print(torch.unique(test_segmentation))
-                    outliers_map = detector(test_image.unsqueeze(0).to(device))
-                    outliers_gt = (test_segmentation == 13).int()
-
-                    test_image = test_image.to(device).unsqueeze(0)
-                    test_logits = model(test_image)
-                    predicted_segmentation = torch.argmax(test_logits, dim=1).squeeze(0)
-                    print(torch.unique(predicted_segmentation))
-
-                    unnormalized_image = test_image * torch.tensor(
-                        [0.229, 0.224, 0.225]
-                    ).view(1, 3, 1, 1).to(device) + torch.tensor(
-                        [0.485, 0.456, 0.406]
-                    ).view(1, 3, 1, 1).to(device)
-
-                    # Create a heatmap image from the outliers_map using a colormap
-                    outliers_map_img = (
-                        outliers_map.squeeze(0).squeeze(0).detach().cpu().numpy()
+                with torch.no_grad():
+                    print(f"Epoch {epoch}/{epochs} - {loss.item()}")
+                    image = semantic_embeddings_plot(
+                        model, dl_train, num_points=3000, device=device
                     )
-                    outliers_map_img = (outliers_map_img * 255).astype("uint8")
-                    outliers_map_img = cv2.applyColorMap(
-                        outliers_map_img, cv2.COLORMAP_JET
+                    writer.add_image(
+                        "Train/Semantic Embeddings",
+                        image,
+                        global_step=global_step,
                     )
-                    outliers_map_img = torch.tensor(outliers_map_img).permute(2, 0, 1)
-                    outliers_map_img = outliers_map_img.to(device)
-                    outliers_map_img = outliers_map_img.float() / 255.0
+                    avg_train_loss = running_train_loss / (i + 1)
+                    early_stopping(avg_train_loss, model)
+                    if early_stopping.early_stop:
+                        print("Early stopping triggered")
+                        writer.close()
+                        return
 
-                    A = unnormalized_image[0]
-                    B = (
-                        torch.Tensor(color(test_segmentation, return_array=True))
-                        .to(device)
-                        .permute(2, 0, 1)
+                    # if i % metric_interval == 0 and i > 0:
+                    # Compute test metrics
+                    detector = EnergyBasedOutlierDetector(
+                        model, temperature=1, device=device
                     )
-                    C = (
-                        torch.Tensor(color(predicted_segmentation, return_array=True))
-                        .to(device)
-                        .permute(2, 0, 1)
-                    )
-                    D = outliers_map_img
-                    print(A.shape, B.shape, C.shape, D.shape)
-                    rows.append(
-                        torch.cat(
-                            [
-                                unnormalized_image[0],
-                                torch.Tensor(
-                                    color(test_segmentation, return_array=True)
-                                )
-                                .to(device)
-                                .permute(2, 0, 1),
-                                torch.Tensor(
-                                    color(predicted_segmentation, return_array=True)
-                                )
-                                .to(device)
-                                .permute(2, 0, 1),
-                                outliers_map_img,
-                            ]
+                    # detector = OutlierDetector(
+                    #     model,
+                    #     num_classes=num_classes,
+                    #     train_dataloader=dl_train_small,
+                    #     device=device,
+                    #     num_samples_per_class=512,
+                    #     pca_dim=128,
+                    # )
+
+                    # Compute the metric over 10 random test images
+                    scores = {"AUPR": [], "mIoU": []}
+                    test_indices = torch.randperm(len(test_dataset))[:2]
+                    rows = []
+                    for idx in tqdm(test_indices, desc="Computing test metrics"):
+                        test_image, test_segmentation = test_dataset[idx]
+                        # Print unique values in test_segmentation
+                        print(torch.unique(test_segmentation))
+                        outliers_map = detector(test_image.unsqueeze(0).to(device))
+                        outliers_gt = (test_segmentation == 13).int()
+
+                        test_image = test_image.to(device).unsqueeze(0)
+                        test_logits = model(test_image)
+                        predicted_segmentation = torch.argmax(
+                            test_logits, dim=1
+                        ).squeeze(0)
+                        print(torch.unique(predicted_segmentation))
+
+                        unnormalized_image = test_image * torch.tensor(
+                            [0.229, 0.224, 0.225]
+                        ).view(1, 3, 1, 1).to(device) + torch.tensor(
+                            [0.485, 0.456, 0.406]
+                        ).view(1, 3, 1, 1).to(device)
+
+                        # Create a heatmap image from the outliers_map using a colormap
+                        outliers_map_img = (
+                            outliers_map.squeeze(0).squeeze(0).detach().cpu().numpy()
                         )
-                    )
+                        outliers_map_img = (outliers_map_img * 255).astype("uint8")
+                        outliers_map_img = cv2.applyColorMap(
+                            outliers_map_img, cv2.COLORMAP_JET
+                        )
+                        outliers_map_img = torch.tensor(outliers_map_img).permute(
+                            2, 0, 1
+                        )
+                        outliers_map_img = outliers_map_img.to(device)
+                        outliers_map_img = outliers_map_img.float() / 255.0
 
-                    aupr = compute_aupr(outliers_gt, outliers_map)
-                    miou = compute_mIoU(
-                        test_segmentation, predicted_segmentation, num_classes + 1
-                    )
+                        A = unnormalized_image[0]
+                        B = (
+                            torch.Tensor(color(test_segmentation, return_array=True))
+                            .to(device)
+                            .permute(2, 0, 1)
+                        )
+                        C = (
+                            torch.Tensor(
+                                color(predicted_segmentation, return_array=True)
+                            )
+                            .to(device)
+                            .permute(2, 0, 1)
+                        )
+                        D = outliers_map_img
+                        print(A.shape, B.shape, C.shape, D.shape)
+                        rows.append(
+                            torch.cat(
+                                [
+                                    unnormalized_image[0],
+                                    torch.Tensor(
+                                        color(test_segmentation, return_array=True)
+                                    )
+                                    .to(device)
+                                    .permute(2, 0, 1),
+                                    torch.Tensor(
+                                        color(predicted_segmentation, return_array=True)
+                                    )
+                                    .to(device)
+                                    .permute(2, 0, 1),
+                                    outliers_map_img,
+                                ]
+                            )
+                        )
 
-                    scores["AUPR"].append(aupr)
-                    scores["mIoU"].append(miou)
+                        aupr = compute_aupr(outliers_gt, outliers_map)
+                        miou = compute_mIoU(
+                            test_segmentation, predicted_segmentation, num_classes + 1
+                        )
 
-                grid = torch.cat(rows, dim=1)  # stack rows vertically
-                grid = grid.unsqueeze(0).detach()
-                writer.add_image("Test/Results", grid, global_step=global_step)
+                        scores["AUPR"].append(aupr)
+                        scores["mIoU"].append(miou)
 
-                for key in scores:
-                    mean_score = sum(scores[key]) / len(scores[key])
-                    std_score = torch.std(torch.tensor(scores[key]))
-                    writer.add_scalar(f"Test/{key}/mean", mean_score, global_step)
-                    writer.add_scalar(
-                        f"Test/{key}/lower", mean_score - std_score, global_step
-                    )
-                    writer.add_scalar(
-                        f"Test/{key}/upper", mean_score + std_score, global_step
-                    )
+                    grid = torch.cat(rows, dim=1)  # stack rows vertically
+                    grid = grid.unsqueeze(0).detach()
+                    writer.add_image("Test/Results", grid, global_step=global_step)
 
-                    print(f"{key} mean: {mean_score} ± {std_score}")
+                    for key in scores:
+                        mean_score = sum(scores[key]) / len(scores[key])
+                        std_score = torch.std(torch.tensor(scores[key]))
+                        writer.add_scalar(f"Test/{key}/mean", mean_score, global_step)
+                        writer.add_scalar(
+                            f"Test/{key}/lower", mean_score - std_score, global_step
+                        )
+                        writer.add_scalar(
+                            f"Test/{key}/upper", mean_score + std_score, global_step
+                        )
+
+                        print(f"{key} mean: {mean_score} ± {std_score}")
 
         avg_train_loss = running_train_loss / len(dl_train)
