@@ -288,9 +288,13 @@ def train_metric_learning(
                             )
                         )
 
-                        aupr = compute_aupr(outliers_gt, outliers_map)
+                        aupr = compute_aupr(
+                            outliers_gt.detach().cpu(), outliers_map.detach().cpu()
+                        )
                         miou = compute_mIoU(
-                            test_segmentation, predicted_segmentation, num_classes + 1
+                            test_segmentation.detach().cpu(),
+                            predicted_segmentation.detach().cpu(),
+                            num_classes + 1,
                         )
 
                         scores["AUPR"].append(aupr)
