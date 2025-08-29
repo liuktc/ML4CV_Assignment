@@ -1,6 +1,6 @@
 # This file contains useful metrics for evaluating the model.
 import torch
-import numpy as np
+from torchmetrics.classification import BinaryAveragePrecision, MulticlassJaccardIndex
 from sklearn.metrics import roc_auc_score
 
 
@@ -17,3 +17,52 @@ def outlier_detection_roc_auc(y_true: torch.Tensor, y_scores: torch.Tensor) -> f
         y_scores = y_scores.view(-1)
     y_scores = (y_scores - y_scores.min()) / (y_scores.max() - y_scores.min() + 1e-8)
     return roc_auc_score(y_true.cpu().numpy(), y_scores.cpu().numpy())
+
+
+##############################################################################
+# ANOMALY DETECTION - AUPR
+##############################################################################
+
+
+def compute_aupr(y_true: torch.Tensor, y_scores: torch.Tensor) -> float:
+    """
+    Compute the Area Under the Precision-Recall Curve (AUPR) for anomaly detection.
+    Uses torchmetrics.BinaryAveragePrecision.
+
+    Args:
+        y_true (torch.Tensor): Binary ground truth labels (1 = anomaly, 0 = normal), shape (N,)
+        y_scores (torch.Tensor): Continuous anomaly scores (higher = more anomalous), shape (N,)
+    Returns:
+        float: AUPR score
+    """
+    if y_true.ndim > 1:
+        y_true = y_true.view(-1)
+        y_scores = y_scores.view(-1)
+
+    aupr_metric = BinaryAveragePrecision()
+    return aupr_metric(y_scores, y_true).item()
+
+
+##############################################################################
+# SEMANTIC SEGMENTATION - mIoU
+##############################################################################
+
+
+def compute_mIoU(y_true: torch.Tensor, y_pred: torch.Tensor, num_classes: int) -> float:
+    """
+    Compute the mean Intersection over Union (mIoU) for semantic segmentation.
+    Uses torchmetrics.MulticlassJaccardIndex.
+
+    Args:
+        y_true (torch.Tensor): Ground truth segmentation masks, shape (N, H, W)
+        y_pred (torch.Tensor): Predicted segmentation masks, shape (N, H, W)
+        num_classes (int): Number of classes
+    Returns:
+        float: Mean IoU score
+    """
+    print(y_true.shape, y_pred.shape)
+    if y_true.shape != y_pred.shape:
+        raise ValueError("y_true and y_pred must have the same shape")
+
+    miou_metric = MulticlassJaccardIndex(num_classes=num_classes, average="macro")
+    return miou_metric(y_pred.unsqueeze(0), y_true.unsqueeze(0)).item()

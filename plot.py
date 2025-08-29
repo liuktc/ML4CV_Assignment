@@ -44,13 +44,17 @@ LABEL_NAMES = [
 ]
 
 
-def color(annotated_image: np.ndarray, colors: np.ndarray = COLORS) -> Image.Image:
+def color(
+    annotated_image: np.ndarray, colors: np.ndarray = COLORS, return_array=False
+) -> Image.Image:
     img_new = np.zeros((*annotated_image.shape, 3), dtype=np.uint8)
 
     for index, color in enumerate(colors):
         img_new[annotated_image == index] = color
-
-    return Image.fromarray(img_new, "RGB")
+    if return_array:
+        return img_new
+    else:
+        return Image.fromarray(img_new, "RGB")
 
 
 def pad_to_multiple_of_14(image):
@@ -66,7 +70,7 @@ def pad_to_multiple_of_14(image):
 
 
 def semantic_embeddings_plot(model, dl, num_points: int = 100, device: str = "cpu"):
-    for images, segmentations, _ in dl:
+    for images, segmentations in dl:
         image = images[0].to(device)
         segmentation = segmentations[0].cpu()
         # plt.imshow(image.permute(1, 2, 0).cpu())
@@ -113,8 +117,6 @@ def semantic_embeddings_plot(model, dl, num_points: int = 100, device: str = "cp
         image_from_plot = Image.open(buf)
         image = np.array(image_from_plot)
         image = torch.tensor(image).permute(2, 0, 1)  # Convert to (C, H, W)
-
-        # Plot using the tensorboard logger, extract the image from the plot
 
         return image
 

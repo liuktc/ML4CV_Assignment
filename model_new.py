@@ -8,11 +8,10 @@ import numpy as np
 from tqdm.auto import tqdm
 from collections import defaultdict
 
+
 # -------------------------------
 # 1. Frozen DINOv2 wrapper
 # -------------------------------
-
-
 class FrozenDINOv2(nn.Module):
     def __init__(self, dinov2_model, out_dim=None, layers_to_use=None, fusion="concat"):
         """
@@ -42,6 +41,7 @@ class FrozenDINOv2(nn.Module):
             self.proj = nn.Conv2d(in_dim, out_dim, kernel_size=1)
         else:
             self.proj = nn.Identity()
+            self.out_dim = dinov2_model.embed_dim
 
     def forward(self, x):
         """
@@ -141,44 +141,32 @@ class DecoderHead(nn.Module):
         return self.decoder(x)
 
 
-# class DecoderHead(nn.Module):
-#     def __init__(self, in_ch, embed_dim=128):
-#         super().__init__()
-#         self.decoder = nn.Sequential(
-#             nn.Conv2d(in_ch, 256, kernel_size=3, padding=1),
-#             nn.BatchNorm2d(256),
-#             nn.ReLU(inplace=True),
-#             # predict features for PixelShuffle (needs out_ch * r^2 channels)
-#             nn.Conv2d(256, embed_dim * (4 * 4), kernel_size=3, padding=1),
-#             nn.PixelShuffle(upscale_factor=4),  # rearranges channels into 4×H, 4×W
-#             nn.BatchNorm2d(embed_dim),
-#             nn.ReLU(inplace=True),
-#         )
-
-#     def forward(self, x):
-#         return self.decoder(x)
-
-
 # -------------------------------
-# 4. Full model
+# 4. Feature extractor + Metric learning head
 # -------------------------------
 class DinoMetricLearning(nn.Module):
     def __init__(
         self,
         dinov2_model,
-        dino_out_dim=384,
+        dino_out_dim=None,
         cnn_out_dim=128,
-        embed_dim=128,
+        out_dim=128,
         down_scaling_factor=1,
         normalize=True,
     ):
         super().__init__()
-        self.dino = FrozenDINOv2(dinov2_model, out_dim=dino_out_dim)
+        self.dino = FrozenDINOv2(
+            dinov2_model,
+            out_dim=dino_out_dim,
+            layers_to_use=[3, 6, 9, 11],
+            fusion="sum",
+        )
         self.local_cnn = LocalCNN(
             in_ch=3, out_ch=cnn_out_dim, down_scaling_factor=down_scaling_factor
         )
-        self.decoder = DecoderHead(dino_out_dim + cnn_out_dim, embed_dim)
+        self.decoder = DecoderHead(self.dino.out_dim + cnn_out_dim, out_dim)
         self.normalize = normalize
+        self.out_dim = out_dim
 
     def forward(self, x):
         B, _, H, W = x.shape
@@ -210,33 +198,10 @@ class DinoMetricLearning(nn.Module):
         return emb
 
 
-class DinoSegmentation(nn.Module):
-    def __init__(
-        self,
-        dino_model,
-        num_classes,
-        dino_out_dim=384,
-        cnn_out_dim=128,
-        embed_dim=128,
-    ):
-        super().__init__()
-        self.feature_extractor = DinoMetricLearning(
-            dino_model, dino_out_dim, cnn_out_dim, embed_dim
-        )
-        self.segmentation_head = nn.Linear(embed_dim, num_classes)
-
-    def forward(self, x):
-        x = self.feature_extractor(x)
-        x = x.permute(0, 2, 3, 1)
-        x = self.segmentation_head(x)
-        x = x.permute(0, 3, 1, 2)
-        return x
-
-
 class DinoUpsampling(nn.Module):
     def __init__(self, dino_model, out_dim=512, normalize: bool = True):
         super().__init__()
-        self.dino = FrozenDINOv2(dino_model)
+        self.dino = FrozenDINOv2(dino_model, layers_to_use=[3, 6, 9, 11], fusion="sum")
 
         self.out_dim = out_dim
         self.fc = nn.Sequential(
@@ -247,6 +212,7 @@ class DinoUpsampling(nn.Module):
         )
 
         self.normalize = normalize
+        self.out_dim = out_dim
 
     def forward(self, x):
         B, _, H, W = x.shape
@@ -269,6 +235,33 @@ class DinoUpsampling(nn.Module):
             feats = F.normalize(feats, p=2, dim=1)
 
         return feats
+
+
+# -------------------------------
+# 5. Segmentation head for supervised segmentation
+# -------------------------------
+class DinoSegmentation(nn.Module):
+    def __init__(
+        self,
+        feature_extractor,
+        num_classes,
+    ):
+        super().__init__()
+        self.feature_extractor = feature_extractor
+        self.segmentation_head = nn.Conv2d(
+            feature_extractor.out_dim, num_classes, kernel_size=1
+        )
+
+    def forward(self, x, return_features=False):
+        features = self.feature_extractor(x)
+        # features = features.permute(0, 2, 3, 1)
+        print(features.shape)
+        logits = self.segmentation_head(features)
+        # logits = logits.permute(0, 3, 1, 2)
+        if return_features:
+            return logits, features
+        else:
+            return logits
 
 
 def pixel_embeddings(backbone, x):
@@ -452,3 +445,41 @@ class ProxyOutlierDetector(nn.Module):
         anomaly_score = anomaly_score.view(B, H, W)
 
         return anomaly_score
+
+
+class EnergyBasedOutlierDetector(nn.Module):
+    def __init__(self, model, temperature=1.0, device="cpu", normalize=False):
+        """
+        Args:
+            model: backbone feature extractor (frozen DINOv3 for example)
+            temperature: temperature scaling for energy score
+            device: device
+            normalize: whether to L2 normalize embeddings before scoring
+        """
+        super().__init__()
+        self.model = model.eval()
+        self.temperature = temperature
+        self.device = device
+        self.normalize = normalize
+
+    def forward(self, x):
+        """
+        Args:
+            x: input image tensor (B,C,H,W)
+        Returns:
+            anomaly maps per image (B, H_p, W_p)
+        """
+        feats, (H, W) = pixel_embeddings(self.model, x.to(self.device))  # (B*H*W, d)
+        if self.normalize:
+            feats = F.normalize(feats, p=2, dim=1)
+
+        # Energy score: -T * logsumexp(f(x)/T)
+        energy_score = -self.temperature * torch.logsumexp(
+            feats / self.temperature, dim=1
+        )  # (B*H*W,)
+
+        # Reshape back to spatial map
+        B = x.shape[0]
+        energy_score = energy_score.view(B, H, W)
+
+        return energy_score
