@@ -126,10 +126,12 @@ def train_metric_learning(
     num_classes: int = 13,
     save_path: str = "metric_learning_model.pth",  # Path to save the best model
     pixel_per_class: int = 50,  # Number of pixels to sample per class
+    writer: SummaryWriter = None,  # Allow passing an existing SummaryWriter
 ):
-    writer = SummaryWriter(
-        os.path.join(log_dir, save_path.split("/")[-1].split(".")[0])
-    )
+    if writer is None:
+        writer = SummaryWriter(
+            os.path.join(log_dir, save_path.split("/")[-1].split(".")[0])
+        )
     global_step = 0
     early_stopping = EarlyStopping(patience=5, min_delta=0.001, save_path=save_path)
 

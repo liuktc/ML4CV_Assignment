@@ -60,7 +60,6 @@ def compute_mIoU(y_true: torch.Tensor, y_pred: torch.Tensor, num_classes: int) -
     Returns:
         float: Mean IoU score
     """
-    print(y_true.shape, y_pred.shape)
     if y_true.shape != y_pred.shape:
         raise ValueError("y_true and y_pred must have the same shape")
 

@@ -1,3 +1,5 @@
+import os
+import json
 import argparse
 
 import torch
@@ -13,6 +15,7 @@ from model_new import DinoMetricLearning, DinoUpsampling, DinoSegmentation
 from train import train_metric_learning
 from loss import FixedWeighting, NormalizedWeighting, UncertaintyWeighting
 
+from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -145,7 +148,27 @@ parser.add_argument(
     default=16,
     help="Output dimension of the CNN in DinoMetricLearning",
 )
+parser.add_argument(
+    "--num_workers",
+    type=int,
+    default=0,
+    help="Number of workers for data loading",
+)
 args = parser.parse_args()
+
+writer = SummaryWriter(
+    os.path.join("runs", args.save_path.split("/")[-1].split(".")[0])
+)
+# Save args to json file
+with open(
+    os.path.join("runs", f"{args.save_path.split('/')[-1].split('.')[0]}.json", "w")
+) as f:
+    json.dump(vars(args), f, indent=4)
+
+writer.add_hparams(
+    vars(args),
+    {},
+)
 
 DISTANCE = args.distance
 MODEL = args.model
@@ -167,6 +190,7 @@ SAVE_PATH = args.save_path
 PLOT_INTERVAL = args.plot_interval
 KAGGLE = args.kaggle
 CNN_OUT_DIM = args.cnn_out_dim
+NUM_WORKERS = args.num_workers
 
 if not NORMALIZE_EMBEDDINGS and DISTANCE == "cos":
     print(
@@ -239,6 +263,8 @@ dataset_train = StreetHazardDataset(
     image_transform=image_transform,
     target_transform=target_transform,
     positive_pairs=False,
+    num_workers=NUM_WORKERS,
+    pin_memory=True if torch.cuda.is_available() else False,
 )
 
 dataset_val = StreetHazardDataset(
@@ -247,6 +273,8 @@ dataset_val = StreetHazardDataset(
     image_transform=image_transform,
     target_transform=target_transform,
     positive_pairs=False,
+    num_workers=NUM_WORKERS,
+    pin_memory=True if torch.cuda.is_available() else False,
 )
 
 dataset_test = StreetHazardDataset(
@@ -255,6 +283,8 @@ dataset_test = StreetHazardDataset(
     image_transform=image_transform,
     target_transform=target_transform,
     positive_pairs=False,
+    num_workers=NUM_WORKERS,
+    pin_memory=True if torch.cuda.is_available() else False,
 )
 
 dl_val = DataLoader(dataset_val, batch_size=BATCH_SIZE, shuffle=False)
@@ -371,4 +401,5 @@ train_metric_learning(
     plot_interval=PLOT_INTERVAL,
     save_path=SAVE_PATH,
     pixel_per_class=PIXEL_PER_CLASS,
+    writer=writer,
 )
