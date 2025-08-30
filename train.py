@@ -1,4 +1,5 @@
 import torch
+import wandb
 import torch.nn as nn
 from tqdm.auto import tqdm
 from torch.utils.data import DataLoader
@@ -127,7 +128,7 @@ def train_metric_learning(
     save_path: str = "metric_learning_model.pth",  # Path to save the best model
     pixel_per_class: int = 50,  # Number of pixels to sample per class
     writer: SummaryWriter = None,  # Allow passing an existing SummaryWriter
-    wandb: bool = False,  # Whether to log to Weights & Biases
+    use_wandb: bool = False,  # Whether to log to Weights & Biases
 ):
     if writer is None:
         writer = SummaryWriter(
@@ -182,7 +183,7 @@ def train_metric_learning(
             writer.add_scalar(
                 "Train/Segmentation_Loss", segmentation_loss_value.item(), global_step
             )
-            if wandb:
+            if use_wandb:
                 wandb.log(
                     {
                         "Train/Loss": loss.item(),
@@ -209,7 +210,7 @@ def train_metric_learning(
                         image,
                         global_step=global_step,
                     )
-                    if wandb:
+                    if use_wandb:
                         wandb.log(
                             {
                                 "Train/Semantic Embeddings": [
@@ -226,7 +227,7 @@ def train_metric_learning(
                     if early_stopping.early_stop:
                         print("Early stopping triggered")
                         writer.close()
-                        if wandb:
+                        if use_wandb:
                             wandb.finish()
                         return
 
@@ -326,7 +327,7 @@ def train_metric_learning(
                     ).squeeze(0)
                     writer.add_image("Test/Results", grid, global_step=global_step)
 
-                    if wandb:
+                    if use_wandb:
                         wandb.log(
                             {
                                 "Test/Results": [
@@ -350,7 +351,7 @@ def train_metric_learning(
                             f"Test/{key}/upper", mean_score + std_score, global_step
                         )
 
-                        if wandb:
+                        if use_wandb:
                             wandb.log(
                                 {
                                     f"Test/{key}/mean": mean_score,

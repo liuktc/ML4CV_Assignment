@@ -413,5 +413,5 @@ train_metric_learning(
     save_path=SAVE_PATH,
     pixel_per_class=PIXEL_PER_CLASS,
     writer=writer,
-    wandb=WANDB,
+    use_wandb=WANDB,
 )
