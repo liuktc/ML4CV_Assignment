@@ -255,7 +255,6 @@ class DinoSegmentation(nn.Module):
     def forward(self, x, return_features=False):
         features = self.feature_extractor(x)
         # features = features.permute(0, 2, 3, 1)
-        print(features.shape)
         logits = self.segmentation_head(features)
         # logits = logits.permute(0, 3, 1, 2)
         if return_features:
