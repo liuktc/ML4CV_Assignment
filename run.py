@@ -274,8 +274,6 @@ dataset_train = StreetHazardDataset(
     image_transform=image_transform,
     target_transform=target_transform,
     positive_pairs=False,
-    num_workers=NUM_WORKERS,
-    pin_memory=True if torch.cuda.is_available() else False,
 )
 
 dataset_val = StreetHazardDataset(
@@ -284,8 +282,6 @@ dataset_val = StreetHazardDataset(
     image_transform=image_transform,
     target_transform=target_transform,
     positive_pairs=False,
-    num_workers=NUM_WORKERS,
-    pin_memory=True if torch.cuda.is_available() else False,
 )
 
 dataset_test = StreetHazardDataset(
@@ -294,12 +290,16 @@ dataset_test = StreetHazardDataset(
     image_transform=image_transform,
     target_transform=target_transform,
     positive_pairs=False,
-    num_workers=NUM_WORKERS,
-    pin_memory=True if torch.cuda.is_available() else False,
 )
 
 dl_val = DataLoader(dataset_val, batch_size=BATCH_SIZE, shuffle=False)
-dl_train = DataLoader(dataset_train, batch_size=BATCH_SIZE, shuffle=True)
+dl_train = DataLoader(
+    dataset_train,
+    batch_size=BATCH_SIZE,
+    shuffle=True,
+    num_workers=NUM_WORKERS,
+    pin_memory=True if torch.cuda.is_available() and NUM_WORKERS > 0 else False,
+)
 # Sample a small random subset of training data for metrics
 dl_train_small = DataLoader(
     Subset(dataset_train, list(torch.randperm(len(dataset_train))[:3])),
