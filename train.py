@@ -8,6 +8,7 @@ from dataset import sample_pixels_per_class
 from model_new import OutlierDetector, EnergyBasedOutlierDetector
 from metrics import outlier_detection_roc_auc, compute_aupr, compute_mIoU
 import cv2
+import os
 
 
 class EarlyStopping:
@@ -126,7 +127,9 @@ def train_metric_learning(
     save_path: str = "metric_learning_model.pth",  # Path to save the best model
     pixel_per_class: int = 50,  # Number of pixels to sample per class
 ):
-    writer = SummaryWriter(log_dir)
+    writer = SummaryWriter(
+        os.path.join(log_dir, save_path.split("/")[-1].split(".")[0])
+    )
     global_step = 0
     early_stopping = EarlyStopping(patience=5, min_delta=0.001, save_path=save_path)
 
@@ -217,7 +220,7 @@ def train_metric_learning(
 
                     # Compute the metric over 10 random test images
                     scores = {"AUPR": [], "mIoU": []}
-                    test_indices = torch.randperm(len(test_dataset))[:2]
+                    test_indices = torch.randperm(len(test_dataset))[:10]
                     rows = []
                     for idx in tqdm(test_indices, desc="Computing test metrics"):
                         test_image, test_segmentation = test_dataset[idx]
@@ -241,9 +244,15 @@ def train_metric_learning(
                         outliers_map_img = (
                             outliers_map.squeeze(0).squeeze(0).detach().cpu().numpy()
                         )
+                        outliers_map_img = (
+                            outliers_map_img - outliers_map_img.min()
+                        ) / (outliers_map_img.max() - outliers_map_img.min() + 1e-8)
                         outliers_map_img = (outliers_map_img * 255).astype("uint8")
                         outliers_map_img = cv2.applyColorMap(
                             outliers_map_img, cv2.COLORMAP_MAGMA
+                        )
+                        outliers_map_img = cv2.cvtColor(
+                            outliers_map_img, cv2.COLOR_BGR2RGB
                         )
                         outliers_map_img = torch.tensor(outliers_map_img).permute(
                             2, 0, 1
