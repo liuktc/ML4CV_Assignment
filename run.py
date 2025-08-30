@@ -167,7 +167,7 @@ writer = SummaryWriter(
 )
 # Save args to json file
 with open(
-    os.path.join("runs", f"{args.save_path.split('/')[-1].split('.')[0]}.json", "w")
+    os.path.join("runs", f"{args.save_path.split('/')[-1].split('.')[0]}.json"), "w"
 ) as f:
     json.dump(vars(args), f, indent=4)
 
