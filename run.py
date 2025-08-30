@@ -1,5 +1,6 @@
 import os
 import json
+import wandb
 import argparse
 
 import torch
@@ -154,6 +155,11 @@ parser.add_argument(
     default=0,
     help="Number of workers for data loading",
 )
+parser.add_argument(
+    "--wandb",
+    action="store_true",
+    help="Whether to log results to Weights & Biases",
+)
 args = parser.parse_args()
 
 writer = SummaryWriter(
@@ -191,11 +197,16 @@ PLOT_INTERVAL = args.plot_interval
 KAGGLE = args.kaggle
 CNN_OUT_DIM = args.cnn_out_dim
 NUM_WORKERS = args.num_workers
+WANDB = args.wandb
 
 if not NORMALIZE_EMBEDDINGS and DISTANCE == "cos":
     print(
         "Warning: Using cosine distance without normalizing embeddings. Are you sure?"
     )
+
+if WANDB:
+    wandb.login()
+    wandb.init(project="ML4CV_Assignment", entity="luca24ever_unibo", config=vars(args))
 
 
 image_size = PadToMultipleOf16().convert_dims(
@@ -402,4 +413,5 @@ train_metric_learning(
     save_path=SAVE_PATH,
     pixel_per_class=PIXEL_PER_CLASS,
     writer=writer,
+    wandb=WANDB,
 )

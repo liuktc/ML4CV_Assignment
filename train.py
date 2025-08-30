@@ -127,6 +127,7 @@ def train_metric_learning(
     save_path: str = "metric_learning_model.pth",  # Path to save the best model
     pixel_per_class: int = 50,  # Number of pixels to sample per class
     writer: SummaryWriter = None,  # Allow passing an existing SummaryWriter
+    wandb: bool = False,  # Whether to log to Weights & Biases
 ):
     if writer is None:
         writer = SummaryWriter(
@@ -181,6 +182,15 @@ def train_metric_learning(
             writer.add_scalar(
                 "Train/Segmentation_Loss", segmentation_loss_value.item(), global_step
             )
+            if wandb:
+                wandb.log(
+                    {
+                        "Train/Loss": loss.item(),
+                        "Train/Metric_Learning_Loss": metric_learning_loss_value.item(),
+                        "Train/Segmentation_Loss": segmentation_loss_value.item(),
+                    },
+                    step=global_step,
+                )
 
             if print_loss:
                 print(
@@ -199,11 +209,25 @@ def train_metric_learning(
                         image,
                         global_step=global_step,
                     )
+                    if wandb:
+                        wandb.log(
+                            {
+                                "Train/Semantic Embeddings": [
+                                    wandb.Image(
+                                        image,
+                                        caption=f"Epoch {epoch} Step {global_step}",
+                                    )
+                                ]
+                            },
+                            step=global_step,
+                        )
                     avg_train_loss = running_train_loss / (i + 1)
                     early_stopping(avg_train_loss, model)
                     if early_stopping.early_stop:
                         print("Early stopping triggered")
                         writer.close()
+                        if wandb:
+                            wandb.finish()
                         return
 
                     # if i % metric_interval == 0 and i > 0:
@@ -302,6 +326,19 @@ def train_metric_learning(
                     ).squeeze(0)
                     writer.add_image("Test/Results", grid, global_step=global_step)
 
+                    if wandb:
+                        wandb.log(
+                            {
+                                "Test/Results": [
+                                    wandb.Image(
+                                        grid,
+                                        caption=f"Epoch {epoch} Step {global_step}",
+                                    )
+                                ]
+                            },
+                            step=global_step,
+                        )
+
                     for key in scores:
                         mean_score = sum(scores[key]) / len(scores[key])
                         std_score = torch.std(torch.tensor(scores[key]))
@@ -312,6 +349,15 @@ def train_metric_learning(
                         writer.add_scalar(
                             f"Test/{key}/upper", mean_score + std_score, global_step
                         )
+
+                        if wandb:
+                            wandb.log(
+                                {
+                                    f"Test/{key}/mean": mean_score,
+                                    f"Test/{key}/std": std_score,
+                                },
+                                step=global_step,
+                            )
 
                         print(f"{key} mean: {mean_score} ± {std_score}")
 
