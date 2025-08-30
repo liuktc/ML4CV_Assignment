@@ -220,7 +220,8 @@ def sample_pixels_per_class(
     X, labels, num_samples_per_class, num_classes=13, ignore_index=255
 ):
     """
-    Sample a fixed number of pixels per class from segmentation labels.
+    Ultra-fast balanced sampler: exactly num_samples_per_class per class (if available).
+    No Python loops over classes.
 
     Args:
         X (torch.Tensor): Input tensor of shape (N, D).
@@ -229,32 +230,55 @@ def sample_pixels_per_class(
         num_classes (int): Total number of valid classes.
         ignore_index (int): Label id to ignore.
     Returns:
-        torch.Tensor: Sampled pixels (M, D)
+        torch.Tensor: Sampled pixels (M, D) where M = sum(valid_classes) * num_samples_per_class
         torch.Tensor: Sampled labels (M,)
     """
-    sampled_pixels = []
-    sampled_labels = []
+    device = X.device
+    N, D = X.shape
 
-    for c in range(num_classes):
-        if c == ignore_index:
-            continue
+    # ---- filter out ignore ----
+    valid_mask = labels != ignore_index
+    labels = labels[valid_mask]
+    X = X[valid_mask]
 
-        # indices of class c
-        idx = torch.nonzero(labels == c, as_tuple=True)[0]
-
-        if idx.numel() == 0:  # class not present in this image
-            continue
-
-        if idx.numel() > num_samples_per_class:
-            perm = torch.randperm(idx.numel(), device=X.device)[:num_samples_per_class]
-            idx = idx[perm]
-
-        sampled_pixels.append(X[idx])
-        sampled_labels.append(
-            torch.full((idx.numel(),), c, device=labels.device, dtype=torch.long)
+    if labels.numel() == 0:
+        return torch.empty(0, D, device=device), torch.empty(
+            0, dtype=torch.long, device=device
         )
 
-    return torch.cat(sampled_pixels, dim=0), torch.cat(sampled_labels, dim=0)
+    # ---- group indices by class ----
+    sorted_labels, sort_idx = torch.sort(labels)
+    X_sorted = X[sort_idx]
+
+    # bincount -> class sizes
+    class_counts = torch.bincount(
+        sorted_labels, minlength=num_classes
+    )  # (num_classes,)
+    class_offsets = torch.cumsum(class_counts, 0)  # exclusive prefix-sum
+    class_starts = class_offsets - class_counts
+
+    # ---- generate random indices for each class ----
+    max_count = class_counts.max().item()
+    rand_idx = torch.randint(
+        0, max_count, (num_classes, num_samples_per_class), device=device
+    )
+
+    # mask out invalid draws (classes with < max_count)
+    valid_mask = rand_idx < class_counts.unsqueeze(1)
+
+    # shift indices into global index space
+    rand_idx = rand_idx + class_starts.unsqueeze(1)
+
+    # flatten valid indices
+    flat_idx = rand_idx[valid_mask]
+
+    sampled_pixels = X_sorted[flat_idx]
+    sampled_labels = torch.arange(num_classes, device=device).repeat_interleave(
+        num_samples_per_class
+    )
+    sampled_labels = sampled_labels[valid_mask.flatten()]
+
+    return sampled_pixels, sampled_labels
 
 
 def compute_class_frequency(dataloader, num_samples_per_class=10, num_images=1000):

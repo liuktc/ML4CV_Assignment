@@ -152,7 +152,7 @@ parser.add_argument(
 parser.add_argument(
     "--num_workers",
     type=int,
-    default=0,
+    default=8,
     help="Number of workers for data loading",
 )
 parser.add_argument(
