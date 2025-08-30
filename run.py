@@ -160,6 +160,12 @@ parser.add_argument(
     action="store_true",
     help="Whether to log results to Weights & Biases",
 )
+parser.add_argument(
+    "--model_path",
+    type=str,
+    default=None,
+    help="Path to a pretrained model to load",
+)
 args = parser.parse_args()
 
 writer = SummaryWriter(
@@ -336,6 +342,12 @@ elif MODEL == "DinoMetricLearning":
         feature_extractor,
         num_classes=NUM_CLASSES,
     ).to(device)
+
+if args.model_path is not None:
+    model.load_state_dict(torch.load(args.model_path, map_location=device))
+    print(f"Loaded model from {args.model_path}")
+else:
+    print("Training model from scratch")
 
 params_to_train = []
 

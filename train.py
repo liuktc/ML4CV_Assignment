@@ -249,7 +249,7 @@ def train_metric_learning(
                     scores = {"AUPR": [], "mIoU": []}
                     test_indices = torch.randperm(len(test_dataset))[:10]
                     rows = []
-                    for idx in tqdm(test_indices, desc="Computing test metrics"):
+                    for idx in test_indices:
                         test_image, test_segmentation = test_dataset[idx]
                         # Print unique values in test_segmentation
                         outliers_map = detector(test_image.unsqueeze(0).to(device))
