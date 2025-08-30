@@ -216,37 +216,45 @@ class PadToMultipleOf16:
         return new_width, new_height
 
 
-def sample_pixels_per_class(X, labels, num_samples_per_class):
+def sample_pixels_per_class(
+    X, labels, num_samples_per_class, num_classes=13, ignore_index=255
+):
     """
-    Sample a fixed number of pixels per class from the segmentation labels.
+    Sample a fixed number of pixels per class from segmentation labels.
 
     Args:
         X (torch.Tensor): Input tensor of shape (N, D).
-        labels (torch.Tensor): Segmentation labels of shape (N, ).
+        labels (torch.Tensor): Segmentation labels of shape (N,).
         num_samples_per_class (int): Number of pixels to sample per class.
+        num_classes (int): Total number of valid classes.
+        ignore_index (int): Label id to ignore.
     Returns:
-        torch.Tensor: Tensor containing sampled pixels.
+        torch.Tensor: Sampled pixels (M, D)
+        torch.Tensor: Sampled labels (M,)
     """
-    classes = torch.unique(labels)
     sampled_pixels = []
     sampled_labels = []
 
-    for c in classes:
-        if c == 255:  # Skip ignore class
+    for c in range(num_classes):
+        if c == ignore_index:
             continue
 
-        mask = labels == c
-        pixels = X[mask]  # shape: (num_pixels_c, D)
-        if pixels.size(0) > num_samples_per_class:
-            indices = torch.randperm(pixels.size(0))[:num_samples_per_class]
-            pixels = pixels[indices]
+        # indices of class c
+        idx = torch.nonzero(labels == c, as_tuple=True)[0]
 
-        sampled_pixels.append(pixels)
-        sampled_labels.extend([c] * pixels.size(0))
+        if idx.numel() == 0:  # class not present in this image
+            continue
 
-    return torch.cat(sampled_pixels, dim=0), torch.tensor(
-        sampled_labels, dtype=torch.long
-    )
+        if idx.numel() > num_samples_per_class:
+            perm = torch.randperm(idx.numel(), device=X.device)[:num_samples_per_class]
+            idx = idx[perm]
+
+        sampled_pixels.append(X[idx])
+        sampled_labels.append(
+            torch.full((idx.numel(),), c, device=labels.device, dtype=torch.long)
+        )
+
+    return torch.cat(sampled_pixels, dim=0), torch.cat(sampled_labels, dim=0)
 
 
 def compute_class_frequency(dataloader, num_samples_per_class=10, num_images=1000):
@@ -256,7 +264,9 @@ def compute_class_frequency(dataloader, num_samples_per_class=10, num_images=100
         X = images.reshape(images.size(1), -1)
         labels = segmentations.reshape(-1)
         sampled_pixels, sampled_labels = sample_pixels_per_class(
-            X, labels, num_samples_per_class
+            X,
+            labels,
+            num_samples_per_class,
         )
         for label in sampled_labels:
             class_counts[label.item()] += 1
