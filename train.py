@@ -158,7 +158,7 @@ def train_metric_learning(
                 embeddings, labels, num_samples_per_class=pixel_per_class
             )
 
-            if mining_func is None:
+            if mining_func is None or not use_metric_learning:
                 indices_tuple = None
             else:
                 indices_tuple = mining_func(embeddings, labels)
