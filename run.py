@@ -426,4 +426,5 @@ train_metric_learning(
     pixel_per_class=PIXEL_PER_CLASS,
     writer=writer,
     use_wandb=WANDB,
+    use_metric_learning=(LAMBDA_METRIC > 0),
 )

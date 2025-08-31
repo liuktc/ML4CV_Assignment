@@ -129,6 +129,7 @@ def train_metric_learning(
     pixel_per_class: int = 50,  # Number of pixels to sample per class
     writer: SummaryWriter = None,  # Allow passing an existing SummaryWriter
     use_wandb: bool = False,  # Whether to log to Weights & Biases
+    use_metric_learning: bool = True,  # Whether to use metric learning loss
 ):
     if writer is None:
         writer = SummaryWriter(
@@ -163,9 +164,12 @@ def train_metric_learning(
                 indices_tuple = mining_func(embeddings, labels)
 
             # Compute losses
-            metric_learning_loss_value = metric_learning_loss(
-                embeddings, labels, indices_tuple
-            )
+            if use_metric_learning:
+                metric_learning_loss_value = metric_learning_loss(
+                    embeddings, labels, indices_tuple
+                )
+            else:
+                metric_learning_loss_value = torch.tensor(0.0).to(device)
             segmentation_loss_value = segmentation_loss(logits, segmentations)
             loss = loss_weighting(metric_learning_loss_value, segmentation_loss_value)
 
