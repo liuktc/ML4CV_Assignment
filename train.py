@@ -130,13 +130,16 @@ def train_metric_learning(
     writer: SummaryWriter = None,  # Allow passing an existing SummaryWriter
     use_wandb: bool = False,  # Whether to log to Weights & Biases
     use_metric_learning: bool = True,  # Whether to use metric learning loss
+    patience: int = 5,  # Patience for early stopping
 ):
     if writer is None:
         writer = SummaryWriter(
             os.path.join(log_dir, save_path.split("/")[-1].split(".")[0])
         )
     global_step = 0
-    early_stopping = EarlyStopping(patience=5, min_delta=0.001, save_path=save_path)
+    early_stopping = EarlyStopping(
+        patience=patience, min_delta=0.001, save_path=save_path
+    )
 
     for epoch in range(epochs):
         model.train()

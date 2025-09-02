@@ -166,6 +166,12 @@ parser.add_argument(
     default=None,
     help="Path to a pretrained model to load",
 )
+parser.add_argument(
+    "--patience",
+    type=int,
+    default=50,
+    help="Patience for early stopping",
+)
 args = parser.parse_args()
 
 writer = SummaryWriter(
@@ -204,6 +210,7 @@ KAGGLE = args.kaggle
 CNN_OUT_DIM = args.cnn_out_dim
 NUM_WORKERS = args.num_workers
 WANDB = args.wandb
+PATIENCE = args.patience
 
 if not NORMALIZE_EMBEDDINGS and DISTANCE == "cos":
     print(
@@ -427,4 +434,5 @@ train_metric_learning(
     writer=writer,
     use_wandb=WANDB,
     use_metric_learning=(LAMBDA_METRIC > 0),
+    patience=PATIENCE,
 )
