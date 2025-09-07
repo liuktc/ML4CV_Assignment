@@ -230,13 +230,14 @@ def train_metric_learning(
                             step=global_step,
                         )
                     avg_train_loss = running_train_loss / (i + 1)
-                    early_stopping(avg_train_loss, model)
-                    if early_stopping.early_stop:
-                        print("Early stopping triggered")
-                        writer.close()
-                        if use_wandb:
-                            wandb.finish()
-                        return
+                    if i > 0:
+                        early_stopping(avg_train_loss, model)
+                        if early_stopping.early_stop:
+                            print("Early stopping triggered")
+                            writer.close()
+                            if use_wandb:
+                                wandb.finish()
+                            return
 
                     # if i % metric_interval == 0 and i > 0:
                     # Compute test metrics
