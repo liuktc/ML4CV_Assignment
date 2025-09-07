@@ -57,6 +57,14 @@ def color(
         return Image.fromarray(img_new, "RGB")
 
 
+def de_normalize(image):
+    mean = torch.tensor([0.485, 0.456, 0.406], device=image.device).view(3, 1, 1)
+    std = torch.tensor([0.229, 0.224, 0.225], device=image.device).view(3, 1, 1)
+    image = image * std + mean
+    image = torch.clamp(image, 0, 1)
+    return image
+
+
 def pad_to_multiple_of_14(image):
     _, h, w = image.shape  # Assume image shape is (C, H, W)
     new_h = ((h + 13) // 14) * 14

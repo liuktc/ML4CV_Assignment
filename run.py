@@ -26,6 +26,9 @@ NUM_CLASSES = 13
 SEED = 42
 ORIGINAL_IMAGE_SIZE = (720, 1280)
 
+# If this URL is expired, get the new one from
+# https://ai.meta.com/resources/models-and-libraries/dinov3-downloads/
+DINO_DOWNLOAD_URL = "https://dinov3.llamameta.net/dinov3_vits16/dinov3_vits16_pretrain_lvd1689m-08c60483.pth?Policy=eyJTdGF0ZW1lbnQiOlt7InVuaXF1ZV9oYXNoIjoiamt3YjZ0eXV6Mm0zcHU3bXBhdmcyeTA5IiwiUmVzb3VyY2UiOiJodHRwczpcL1wvZGlub3YzLmxsYW1hbWV0YS5uZXRcLyoiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3NTc0MzM3NDR9fX1dfQ__&Signature=p1kwAtuf8EVDt-H5bjHhlmnEu0XYwILnTjrUeP9-ITJCtsylMfvKYvRTI2DbVABd77bX6frjTZCHrlRkmrvDqg%7EmmemDgY12Oi4pYlZSVQJ-mCawHj2tuyS%7E0LNGG66ZHCSlSghNOgywNpjd%7ExXB2JV%7EkSMxt%7EqnM6QuIkd-3I3dnD1DMQXwlnZ7k2J2-cgIZpri1i9RL6cYw-o5SrqcopT78%7EiPqCVXQh0xDBgzUweOrLXugLY239%7EJxovQpRDf2jRJbSmHoQAoH3u93d86OmWf1VuMu2ZODYUsaBwQgCzmFjCw39ngXTeFdf4fEyPsofxiLH0HT3g3YveVrrMOjQ__&Key-Pair-Id=K15QRJLYKIFSLZ&Download-Request-ID=979366987651947"
 # Seed everything
 torch.manual_seed(SEED)
 torch.cuda.manual_seed(SEED)
@@ -325,7 +328,7 @@ backbone = torch.hub.load(
     "./dinov3",
     "dinov3_vits16",
     source="local",
-    weights="https://dinov3.llamameta.net/dinov3_vits16/dinov3_vits16_pretrain_lvd1689m-08c60483.pth?Policy=eyJTdGF0ZW1lbnQiOlt7InVuaXF1ZV9oYXNoIjoiOHppYnI1MjB4NzVzNGZxbXpodTVnbndzIiwiUmVzb3VyY2UiOiJodHRwczpcL1wvZGlub3YzLmxsYW1hbWV0YS5uZXRcLyoiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3NTY5MTUxNDF9fX1dfQ__&Signature=Xw7TaFMGn3Z7y9Y12-R1virV1ZQPfblWOGr-7wBgcxwMkNj3NvuXC18tN%7ERAbvKKGNQgvXPBQoVc1XfAvphfUOXQi7tqCt2RbLojJlelfnwDnN0QoqhnMLWUgAXHhDc0VyqQcrXYAy44mx8dqyIVGLH37ca0196hdIoXutZEtnrtnLHqhr9-QR2qsOkwV0yl0oUGoATHwvDb8W1ChnkVoS0t08LogKZd1likEx25ZIW5g2FM2IMfpyyiV8Z5-DOQythF4eeocyqMJHFpqhI7pBgUDRyji3daJQzB6PefNvEda7G6g30rVzEj5FTFdXAOR4favjoGKa%7Eh1x5OePLhlw__&Key-Pair-Id=K15QRJLYKIFSLZ&Download-Request-ID=1292726919301558",
+    weights=DINO_DOWNLOAD_URL,
 )
 backbone = backbone.to(device)
 
