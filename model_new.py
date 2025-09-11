@@ -546,7 +546,7 @@ class GMMOutlierDetector(nn.Module):
                 labels_flat = labels_flat.to(self.device)
                 self.gmm.fit_batch(feats, labels_flat)
                 if (i + 1) % self.step_batch == 0:
-                    self.gmm.update_gmm()
+                    self.gmm.finalize_batch()
             self.fitted = True
 
     def forward(self, x):
