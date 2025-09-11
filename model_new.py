@@ -551,7 +551,7 @@ class GMMOutlierDetector(nn.Module):
                     self.gmm.finalize_batch()
             self.fitted = True
 
-    def forward(self, x):
+    def forward(self, x, return_prob_dist=False):
         with torch.no_grad():
             self.gmm.eval()
             assert self.fitted, "GMM must be fitted before calling forward"
@@ -560,7 +560,9 @@ class GMMOutlierDetector(nn.Module):
             B, C, H, W = feats.shape
             feats = feats.permute(0, 2, 3, 1).reshape(-1, C)  # (B*H*W, C)
 
-            probs = self.gmm.predict_proba(feats)  # (B*H*W, num_classes)
+            probs = self.gmm.predict_proba(
+                feats, return_prob_dist=return_prob_dist
+            )  # (B*H*W, num_classes)
 
             # Anomaly score: 1 - max class probability
             anomaly_score = 1.0 - torch.max(probs, dim=1).values  # (B*H*W,)
