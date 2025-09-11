@@ -7,6 +7,7 @@ from utils import sample_pixels_per_class
 import numpy as np
 from tqdm.auto import tqdm
 from collections import defaultdict
+from gms import ClassConditionalGMM
 
 
 # -------------------------------
@@ -251,6 +252,7 @@ class DinoSegmentation(nn.Module):
         self.segmentation_head = nn.Conv2d(
             feature_extractor.out_dim, num_classes, kernel_size=1
         )
+        self.out_dim = feature_extractor.out_dim
 
     def forward(self, x, return_features=False):
         features = self.feature_extractor(x)
@@ -447,19 +449,17 @@ class ProxyOutlierDetector(nn.Module):
 
 
 class EnergyBasedOutlierDetector(nn.Module):
-    def __init__(self, model, temperature=1.0, device="cpu", normalize=False):
+    def __init__(self, model, temperature=1.0, device="cpu"):
         """
         Args:
-            model: backbone feature extractor (frozen DINOv3 for example)
+            model: segmentation model with logits output
             temperature: temperature scaling for energy score
             device: device
-            normalize: whether to L2 normalize embeddings before scoring
         """
         super().__init__()
         self.model = model.eval()
         self.temperature = temperature
         self.device = device
-        self.normalize = normalize
 
     def forward(self, x):
         """
@@ -468,17 +468,84 @@ class EnergyBasedOutlierDetector(nn.Module):
         Returns:
             anomaly maps per image (B, H_p, W_p)
         """
-        feats, (H, W) = pixel_embeddings(self.model, x.to(self.device))  # (B*H*W, d)
-        if self.normalize:
-            feats = F.normalize(feats, p=2, dim=1)
+        x = x.to(self.device)
+        logits = self.model(x)  # (B, num_classes, H_p, W_p)
 
         # Energy score: -T * logsumexp(f(x)/T)
         energy_score = -self.temperature * torch.logsumexp(
-            feats / self.temperature, dim=1
-        )  # (B*H*W,)
-
-        # Reshape back to spatial map
-        B = x.shape[0]
-        energy_score = energy_score.view(B, H, W)
+            logits / self.temperature, dim=1
+        )  # (B, H_p, W_p)
 
         return energy_score
+
+
+class GMMOutlierDetector(nn.Module):
+    def __init__(
+        self,
+        model: DinoSegmentation,
+        num_classes,
+        n_components=5,
+        step_batch=2,
+        covariance_type="diag",
+        device="cpu",
+        seed=12345,
+    ):
+        """
+        Args:
+            model: backbone feature extractor (frozen DINOv3 for example)
+            num_classes: number of classes
+            n_components: number of GMM components per class
+            step_batch: number of batches to accumulate before GMM update
+            device: device
+            seed: random seed for reproducibility
+        """
+        super().__init__()
+        self.model: DinoSegmentation = model.eval()
+        self.num_classes = num_classes
+        self.n_components = n_components
+        self.device = device
+        self.seed = seed
+        self.gmm = ClassConditionalGMM(
+            num_classes=num_classes,
+            n_components=n_components,
+            dim=model.out_dim,
+            covariance_type=covariance_type,
+            reg_covar=1e-6,
+            device=device,
+            seed=seed,
+        )
+        self.fitted = False
+        self.step_batch = step_batch
+
+    def fit(self, dataloader):
+        """
+        Fit GMM on features extracted from dataloader
+        Args:
+            dataloader: dataloader yielding (x, y, _) where
+                x: (B,C,H,W) input image
+                y: (B,H,W) ground truth labels
+        """
+        self.gmm.train()
+        for i, (x, y) in tqdm(enumerate(dataloader), desc="Fitting GMM"):
+            x = x.to(self.device)
+            y = y.to(self.device)
+            _, feats = self.model(x, return_features=True)  # (B,C,H,W)
+            feats = feats.permute(0, 2, 3, 1).reshape(-1, feats.shape[1])  # (B*H*W, C)
+            labels_flat = y.reshape(-1)  # (B*H*W,)
+            self.gmm.fit_batch(feats, labels_flat)
+            if (i + 1) % self.step_batch == 0:
+                self.gmm.update_gmm()
+        self.fitted = True
+
+    def forward(self, x):
+        # Extract features
+        _, feats = self.model(x.to(self.device), return_features=True)  # (B,C,H,W)
+        B, C, H, W = feats.shape
+        feats = feats.permute(0, 2, 3, 1).reshape(-1, C)  # (B*H*W, C)
+
+        probs = self.gmm.predict_proba(feats)  # (B*H*W, num_classes)
+
+        # Anomaly score: 1 - max class probability
+        anomaly_score = 1.0 - torch.max(probs, dim=1).values  # (B*H*W,)
+        anomaly_score = anomaly_score.view(B, H, W)  # (B, H, W)
+        return anomaly_score
