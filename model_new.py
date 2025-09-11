@@ -527,34 +527,40 @@ class GMMOutlierDetector(nn.Module):
                 x: (B,C,H,W) input image
                 y: (B,H,W) ground truth labels
         """
-        self.gmm.train()
-        for i, (x, y) in tqdm(enumerate(dataloader), desc="Fitting GMM"):
-            x = x.to(self.device)
-            y = y.to(self.device)
-            _, feats = self.model(x, return_features=True)  # (B,C,H,W)
-            feats = feats.permute(0, 2, 3, 1).reshape(-1, feats.shape[1])  # (B*H*W, C)
-            labels_flat = y.reshape(-1)  # (B*H*W,)
-            feats, labels_flat = sample_pixels_per_class(
-                feats.detach().cpu(),
-                labels_flat.detach().cpu(),
-                num_samples_per_class=self.num_samples_per_class,
-            )
-            feats = feats.to(self.device)
-            labels_flat = labels_flat.to(self.device)
-            self.gmm.fit_batch(feats, labels_flat)
-            if (i + 1) % self.step_batch == 0:
-                self.gmm.update_gmm()
-        self.fitted = True
+        with torch.no_grad():
+            self.gmm.train()
+            for i, (x, y) in tqdm(enumerate(dataloader), desc="Fitting GMM"):
+                x = x.to(self.device)
+                y = y.to(self.device)
+                _, feats = self.model(x, return_features=True)  # (B,C,H,W)
+                feats = feats.permute(0, 2, 3, 1).reshape(
+                    -1, feats.shape[1]
+                )  # (B*H*W, C)
+                labels_flat = y.reshape(-1)  # (B*H*W,)
+                feats, labels_flat = sample_pixels_per_class(
+                    feats.detach().cpu(),
+                    labels_flat.detach().cpu(),
+                    num_samples_per_class=self.num_samples_per_class,
+                )
+                feats = feats.to(self.device)
+                labels_flat = labels_flat.to(self.device)
+                self.gmm.fit_batch(feats, labels_flat)
+                if (i + 1) % self.step_batch == 0:
+                    self.gmm.update_gmm()
+            self.fitted = True
 
     def forward(self, x):
-        # Extract features
-        _, feats = self.model(x.to(self.device), return_features=True)  # (B,C,H,W)
-        B, C, H, W = feats.shape
-        feats = feats.permute(0, 2, 3, 1).reshape(-1, C)  # (B*H*W, C)
+        with torch.no_grad():
+            self.gmm.eval()
+            assert self.fitted, "GMM must be fitted before calling forward"
+            # Extract features
+            _, feats = self.model(x.to(self.device), return_features=True)  # (B,C,H,W)
+            B, C, H, W = feats.shape
+            feats = feats.permute(0, 2, 3, 1).reshape(-1, C)  # (B*H*W, C)
 
-        probs = self.gmm.predict_proba(feats)  # (B*H*W, num_classes)
+            probs = self.gmm.predict_proba(feats)  # (B*H*W, num_classes)
 
-        # Anomaly score: 1 - max class probability
-        anomaly_score = 1.0 - torch.max(probs, dim=1).values  # (B*H*W,)
-        anomaly_score = anomaly_score.view(B, H, W)  # (B, H, W)
-        return anomaly_score
+            # Anomaly score: 1 - max class probability
+            anomaly_score = 1.0 - torch.max(probs, dim=1).values  # (B*H*W,)
+            anomaly_score = anomaly_score.view(B, H, W)  # (B, H, W)
+            return anomaly_score
