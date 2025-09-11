@@ -529,7 +529,9 @@ class GMMOutlierDetector(nn.Module):
         """
         with torch.no_grad():
             self.gmm.train()
-            for i, (x, y) in tqdm(enumerate(dataloader), desc="Fitting GMM"):
+            for i, (x, y) in tqdm(
+                enumerate(dataloader), desc="Fitting GMM", total=len(dataloader)
+            ):
                 x = x.to(self.device)
                 y = y.to(self.device)
                 _, feats = self.model(x, return_features=True)  # (B,C,H,W)
