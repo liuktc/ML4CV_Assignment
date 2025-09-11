@@ -398,7 +398,9 @@ class ClassConditionalGMM(nn.Module):
                             continue
                         var_diag = (self.ss_sum_vardiag[c, k] / Nk_ck) + self.reg_covar
                         # Change
-                        tot += torch.norm(var_diag - self.covariances[c, k].double())
+                        tot += torch.norm(
+                            var_diag.to(self.device) - self.covariances[c, k].double()
+                        )
                         self.covariances[c, k] = var_diag.to(self.device)
                 print(
                     f"[finalize_batch] Average change in diag covariances: {tot.item() / (C * K):.6f}"
