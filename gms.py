@@ -388,6 +388,7 @@ class ClassConditionalGMM(nn.Module):
                         )
                         self.covariances[c, k] = cov.to(self.device)
             else:
+                tot = torch.zeros(1)
                 for c in range(C):
                     if self.ss_class_counts[c] == 0:
                         continue
@@ -396,7 +397,12 @@ class ClassConditionalGMM(nn.Module):
                         if Nk_ck < 1e-8:
                             continue
                         var_diag = (self.ss_sum_vardiag[c, k] / Nk_ck) + self.reg_covar
+                        # Change
+                        tot += torch.norm(var_diag - self.covariances[c, k].double())
                         self.covariances[c, k] = var_diag.to(self.device)
+                print(
+                    f"[finalize_batch] Average change in diag covariances: {tot.item() / (C * K):.6f}"
+                )
 
         if verbose:
             # some checks / tests: ensure consistency etc
