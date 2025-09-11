@@ -351,6 +351,7 @@ class ClassConditionalGMM(nn.Module):
             self.total_count = self.ss_total_count
 
             # Update weights & means
+            tot_means_change = torch.zeros(1).to(self.device)
             for c in range(C):
                 Nc = self.ss_class_counts[c]
                 if Nc == 0:
@@ -363,6 +364,10 @@ class ClassConditionalGMM(nn.Module):
                     # weight of component within class
                     self.weights[c, k] = Nk_ck / (Nc)
                     # mean
+                    tot_means_change += torch.norm(
+                        self.means[c, k].double().to(self.device)
+                        - (self.ss_sum[c, k] / Nk_ck).to(self.device)
+                    )
                     self.means[c, k] = (self.ss_sum[c, k] / Nk_ck).to(self.device)
 
             # Update covariances
@@ -404,7 +409,7 @@ class ClassConditionalGMM(nn.Module):
                         )
                         self.covariances[c, k] = var_diag.to(self.device)
                 print(
-                    f"[finalize_batch] Average change in diag covariances: {tot.item() / (C * K):.6f}"
+                    f"[finalize_batch] Average change in diag covariances: {tot.item() / (C * K):.6f}, {tot_means_change.item() / (C * K):.6f}"
                 )
 
         if verbose:
