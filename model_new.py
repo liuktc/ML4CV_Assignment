@@ -487,6 +487,7 @@ class GMMOutlierDetector(nn.Module):
         n_components=5,
         step_batch=2,
         covariance_type="diag",
+        num_samples_per_class=50,
         device="cpu",
         seed=12345,
     ):
@@ -516,6 +517,7 @@ class GMMOutlierDetector(nn.Module):
         )
         self.fitted = False
         self.step_batch = step_batch
+        self.num_samples_per_class = num_samples_per_class
 
     def fit(self, dataloader):
         """
@@ -532,6 +534,13 @@ class GMMOutlierDetector(nn.Module):
             _, feats = self.model(x, return_features=True)  # (B,C,H,W)
             feats = feats.permute(0, 2, 3, 1).reshape(-1, feats.shape[1])  # (B*H*W, C)
             labels_flat = y.reshape(-1)  # (B*H*W,)
+            feats, labels_flat = sample_pixels_per_class(
+                feats.detach().cpu(),
+                labels_flat.detach().cpu(),
+                num_samples_per_class=self.num_samples_per_class,
+            )
+            feats = feats.to(self.device)
+            labels_flat = labels_flat.to(self.device)
             self.gmm.fit_batch(feats, labels_flat)
             if (i + 1) % self.step_batch == 0:
                 self.gmm.update_gmm()
