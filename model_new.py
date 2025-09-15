@@ -8,6 +8,7 @@ import numpy as np
 from tqdm.auto import tqdm
 from collections import defaultdict
 from gms import ClassConditionalGMM
+from typing import Literal
 
 
 # -------------------------------
@@ -401,6 +402,26 @@ class OutlierDetector(nn.Module):
         return min_dists.reshape(H, W)  # anomaly map
 
 
+class AbstractOutlierDetector(nn.Module):
+    def __init__(self, model, device="cpu", needs_fit=False):
+        super().__init__()
+        self.model = model.eval()
+        self.device = device
+        self.needs_fit = needs_fit
+
+    def forward(self, x):
+        """
+        Args:
+            x: input image tensor (B,C,H,W)
+        Returns:
+            anomaly maps per image (B, H_p, W_p)
+        """
+        raise NotImplementedError
+
+    def fit(self, dataloader):
+        raise NotImplementedError
+
+
 class ProxyOutlierDetector(nn.Module):
     def __init__(self, model, proxies, device="cpu", normalize=True):
         """
@@ -448,7 +469,7 @@ class ProxyOutlierDetector(nn.Module):
         return anomaly_score
 
 
-class EnergyBasedOutlierDetector(nn.Module):
+class EnergyBasedOutlierDetector(AbstractOutlierDetector):
     def __init__(self, model, temperature=1.0, device="cpu"):
         """
         Args:
@@ -456,10 +477,8 @@ class EnergyBasedOutlierDetector(nn.Module):
             temperature: temperature scaling for energy score
             device: device
         """
-        super().__init__()
-        self.model = model.eval()
+        super().__init__(model, device, needs_fit=False)
         self.temperature = temperature
-        self.device = device
 
     def forward(self, x):
         """
@@ -479,11 +498,11 @@ class EnergyBasedOutlierDetector(nn.Module):
         return energy_score
 
 
-class GMMOutlierDetector(nn.Module):
+class GMMOutlierDetector(AbstractOutlierDetector):
     def __init__(
         self,
         model: DinoSegmentation,
-        num_classes,
+        num_classes=13,
         n_components=5,
         step_batch=2,
         covariance_type="diag",
@@ -500,11 +519,9 @@ class GMMOutlierDetector(nn.Module):
             device: device
             seed: random seed for reproducibility
         """
-        super().__init__()
-        self.model: DinoSegmentation = model.eval()
+        super().__init__(model, device, needs_fit=True)
         self.num_classes = num_classes
         self.n_components = n_components
-        self.device = device
         self.seed = seed
         self.gmm = ClassConditionalGMM(
             num_classes=num_classes,
@@ -523,7 +540,7 @@ class GMMOutlierDetector(nn.Module):
         """
         Fit GMM on features extracted from dataloader
         Args:
-            dataloader: dataloader yielding (x, y, _) where
+            dataloader: dataloader yielding (x, y) where
                 x: (B,C,H,W) input image
                 y: (B,H,W) ground truth labels
         """
@@ -570,3 +587,49 @@ class GMMOutlierDetector(nn.Module):
             if return_probs:
                 return probs
             return anomaly_score
+
+
+def build_model(
+    type: Literal["full", "dino_upsample"],
+    dino_url: str,
+    weights: str,
+    embedding_dim: int = 256,
+    cnn_out_dim: int = None,
+    dino_repo: str = "./dinov3",
+    device: str = "cpu",
+    num_classes: int = 13,
+):
+    if type == "full":
+        assert cnn_out_dim is not None, "cnn_out_dim must be specified for dino_seg"
+        backbone = torch.hub.load(
+            dino_repo,
+            "dinov3_vits16",
+            source="local",
+            weights=dino_url,
+        ).to(device)
+        feature_extractor = DinoMetricLearning(
+            backbone,
+            dino_out_dim=None,
+            cnn_out_dim=cnn_out_dim,
+            out_dim=embedding_dim,
+        ).to(device)
+        model = DinoSegmentation(
+            feature_extractor,
+            num_classes=num_classes,
+        ).to(device)
+    elif type == "dino_upsample":
+        backbone = torch.hub.load(
+            dino_repo,
+            "dinov3_vits16",
+            source="local",
+            weights=dino_url,
+        ).to(device)
+        backbone_upsample = DinoUpsampling(backbone, out_dim=embedding_dim).to(device)
+        model = DinoSegmentation(backbone_upsample, num_classes=num_classes).to(device)
+
+    if weights is not None:
+        model.load_state_dict(
+            torch.load(weights, weights_only=True, map_location=device)
+        )
+
+    return model

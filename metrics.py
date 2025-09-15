@@ -2,6 +2,10 @@
 import torch
 from torchmetrics.classification import BinaryAveragePrecision, MulticlassJaccardIndex
 from sklearn.metrics import roc_auc_score
+from torch import nn
+from torch.utils.data import Dataset
+from typing import Literal
+from tqdm.auto import tqdm
 
 
 def outlier_detection_roc_auc(y_true: torch.Tensor, y_scores: torch.Tensor) -> float:
@@ -65,3 +69,49 @@ def compute_mIoU(y_true: torch.Tensor, y_pred: torch.Tensor, num_classes: int) -
 
     miou_metric = MulticlassJaccardIndex(num_classes=num_classes, average="macro")
     return miou_metric(y_pred.unsqueeze(0), y_true.unsqueeze(0)).item()
+
+
+def compute_metrics(
+    model: nn.Module,
+    detector,
+    test_dataset: Dataset,
+    device: str,
+    model_name: str = "",
+    detector_name: str = "",
+):
+    model.eval()
+
+    metrics = {"aupr": [], "miou": []}
+
+    for idx in tqdm(
+        range(len(test_dataset)),
+        desc=f"Computing metrics for {model_name} using {detector_name}:",
+    ):
+        test_image, test_segmentation = test_dataset[idx]
+        test_image = test_image.unsqueeze(0).to(device)
+
+        outliers_map = detector(test_image)
+        outliers_gt = (test_segmentation == 13).int()
+
+        test_logits = model(test_image)
+        predicted_segmentation = (
+            torch.argmax(test_logits, dim=1).squeeze(0).detach().cpu()
+        )
+
+        aupr = compute_aupr(outliers_gt.detach().cpu(), outliers_map.detach().cpu())
+        miou = compute_mIoU(
+            test_segmentation.detach().cpu(),
+            predicted_segmentation.detach().cpu(),
+            13 + 1,
+        )
+
+        metrics["aupr"].append(aupr)
+        metrics["miou"].append(miou)
+
+    results = {}
+    for key in metrics.keys():
+        results[key] = {}
+        results[key]["mean"] = sum(metrics[key]) / len(metrics[key])
+        results[key]["std"] = torch.std(torch.tensor(metrics[key])).item()
+
+    return results
