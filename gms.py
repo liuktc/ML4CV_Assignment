@@ -408,9 +408,6 @@ class ClassConditionalGMM(nn.Module):
                             - self.covariances[c, k].double().to(self.device)
                         )
                         self.covariances[c, k] = var_diag.to(self.device)
-                print(
-                    f"[finalize_batch] Average change in diag covariances: {tot.item() / (C * K):.6f}, {tot_means_change.item() / (C * K):.6f}"
-                )
 
         if verbose:
             # some checks / tests: ensure consistency etc
