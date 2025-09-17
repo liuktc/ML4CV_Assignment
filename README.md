@@ -1,3 +1,8 @@
+<!-- Badges -->
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)  
+[![Python Version](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+
 # Open-World Semantic Segmentation (ML4CV Assignment)
 
 This repository contains the implementation of an open-world semantic segmentation model using a pre-trained DINOv3 backbone and metric learning techniques. The model is designed to segment known classes while identifying unknown classes as anomalies.
@@ -50,3 +55,11 @@ python run.py --save_path "triplet_metric_fixed.pth" --model DinoMetricLearning 
 ## Inference
 
 The `main.ipynb` notebook contains the inference code for testing and visualization. Tu run it, simply import it to KAGGLE (and set the global constant at the top `KAGGLE = True`) or run it locally (set `KAGGLE = False`).
+
+![Example Output](https://github.com/liuktc/ML4CV_Assignment/blob/62ef47c84dfc9df7f232196583aa8d1f25141a0c/output.png?raw=true)
+
+## Contacts
+
+For any questions or issues, please contact:
+
+- Luca Domeniconi (luca.domeniconi5@studio.unibo.it)
