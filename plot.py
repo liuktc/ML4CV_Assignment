@@ -144,8 +144,11 @@ def plot_semantic_segmentation(image, predicted, gt):
 
 
 def plot_examples(
-    model, detector, dataset_test, indices, device, model_name, detector_name
+    model, detector, dataset_test, indices, device, model_name: str, detector_name: str
 ):
+    # LaTeX compatible names
+    model_name.replace(r"_", r"\_")
+    detector_name.replace(r"_", r"\_")
     # Many plots using all the models and detectors
     test_images = []
     test_segmentations = []
@@ -164,44 +167,47 @@ def plot_examples(
         pred_segmentations.append(pred_segmentation)
 
         # detector = EnergyBasedOutlierDetector(model=model, temperature=1).to(device)
-        anomaly_map = detector(test_image.unsqueeze(0).to(device))
+        anomaly_map = detector(test_image.unsqueeze(0).to(device))[0]
+        anomaly_map = (anomaly_map - anomaly_map.min()) / (
+            anomaly_map.max() - anomaly_map.min()
+        )  # Normalize to [0, 1]
         anomaly_maps.append(anomaly_map)
 
         # Use anomaly maps to change the pred_segmentation
         pred_segmentation_with_anomalies = pred_segmentation.clone()
-        pred_segmentation_with_anomalies[anomaly_map > 0.5] = (
+        pred_segmentation_with_anomalies[anomaly_map > 0.7] = (
             13  # Set anomaly class if the anomaly map is above 0.5
         )
         pred_segmentations_with_anomalies.append(pred_segmentation_with_anomalies)
 
-    plt.figure(figsize=(25, 5 * len(indices)))
-    plt.suptitle(f"{model_name} with {detector_name}", fontsize=18)
+    plt.figure(figsize=(25, 3 * len(indices)))
+    plt.suptitle(f"{model_name} with {detector_name}", fontsize=36)
     for i in range(len(indices)):
-        plt.subplot(i + 1, 5, i * 4 + 1)
+        plt.subplot(len(indices), 5, i * 5 + 1)
         plt.imshow(de_normalize(test_images[i]).permute(1, 2, 0))
         plt.axis("off")
         if i == 0:
             plt.title("Test Image")
 
-        plt.subplot(i + 1, 5, i * 4 + 2)
-        plt.imshow(color(test_images[i]))
+        plt.subplot(len(indices), 5, i * 5 + 2)
+        plt.imshow(color(test_segmentations[i]))
         plt.axis("off")
         if i == 0:
             plt.title("Ground Truth Segmentation")
 
-        plt.subplot(i + 1, 5, i * 4 + 3)
+        plt.subplot(len(indices), 5, i * 5 + 3)
         plt.imshow(anomaly_maps[i].detach().squeeze(0).squeeze(0).cpu(), cmap="hot")
         plt.axis("off")
         if i == 0:
             plt.title("Anomaly Map")
 
-        plt.subplot(i + 1, 5, i * 4 + 4)
+        plt.subplot(len(indices), 5, i * 5 + 4)
         plt.imshow(color(pred_segmentations[i]))
         if i == 0:
             plt.title("Predicted Segmentation")
         plt.axis("off")
 
-        plt.subplot(i + 1, 5, i * 4 + 5)
+        plt.subplot(len(indices), 5, i * 5 + 5)
         plt.imshow(color(pred_segmentations_with_anomalies[i]))
         if i == 0:
             plt.title("Predicted Segmentation \n (with anomalies)")
