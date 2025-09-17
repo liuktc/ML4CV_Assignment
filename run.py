@@ -1,22 +1,19 @@
-import os
-import json
-import wandb
 import argparse
+import json
+import os
 
 import torch
+from pytorch_metric_learning import distances, losses, miners, reducers
 from torch.utils.data import DataLoader, Subset
+from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
 
-
-from pytorch_metric_learning import distances, losses, miners, reducers, testers
-from dataset import StreetHazardDataset, PadToMultipleOf16, StreetHazardDatasetTriplet
-
-from model_new import DinoMetricLearning, DinoUpsampling, DinoSegmentation
-from train import train_metric_learning
+import wandb
+from dataset import PadToMultipleOf16, StreetHazardDataset
 from loss import FixedWeighting, NormalizedWeighting, UncertaintyWeighting
-
-from torch.utils.tensorboard import SummaryWriter
+from model_new import DinoMetricLearning, DinoSegmentation, DinoUpsampling
+from train import train_metric_learning
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

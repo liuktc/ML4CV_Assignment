@@ -20,3 +20,7 @@ downloads
 weights
 
 /test*
+
+/dino_embedding.ipynb
+/dinov2.ipynb
+/wandb*
