@@ -568,7 +568,7 @@ class GMMOutlierDetector(AbstractOutlierDetector):
                     self.gmm.finalize_batch()
             self.fitted = True
 
-    def forward(self, x, return_probs=False, return_prob_dist=False):
+    def forward(self, x, return_probs=False, return_prob_dist=True):
         with torch.no_grad():
             self.gmm.eval()
             assert self.fitted, "GMM must be fitted before calling forward"
