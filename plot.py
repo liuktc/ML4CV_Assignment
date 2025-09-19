@@ -144,7 +144,14 @@ def plot_semantic_segmentation(image, predicted, gt):
 
 
 def plot_examples(
-    model, detector, dataset_test, indices, device, model_name: str, detector_name: str
+    model,
+    detector,
+    dataset_test,
+    indices,
+    device,
+    model_name: str,
+    detector_name: str,
+    cmap: str = "hot",
 ):
     # LaTeX compatible names
     model_name.replace(r"_", r"\_")
@@ -196,7 +203,7 @@ def plot_examples(
             plt.title("Ground Truth Segmentation")
 
         plt.subplot(len(indices), 5, i * 5 + 3)
-        plt.imshow(anomaly_maps[i].detach().squeeze(0).squeeze(0).cpu(), cmap="hot")
+        plt.imshow(anomaly_maps[i].detach().squeeze(0).squeeze(0).cpu(), cmap=cmap)
         plt.axis("off")
         if i == 0:
             plt.title("Anomaly Map")
