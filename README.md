@@ -4,7 +4,7 @@
 
 # Open-World Semantic Segmentation (ML4CV Assignment)
 
-This repository contains the implementation of an open-world semantic segmentation model using a pre-trained DINOv3 backbone and metric learning techniques. The model is designed to segment known classes while identifying unknown classes as anomalies.
+This repository contains the implementation of an open-world semantic segmentation model using a pre-trained DINOv3 backbone and metric learning techniques. The model is designed to segment known classes while identifying unknown classes as anomalies. [Assignment Page](https://github.com/CVLAB-Unibo/ml4cv-assignment)
 
 ## Setup
 
@@ -21,6 +21,12 @@ To run the code locally, create a virtual environment and install the required p
 
 ```bash
 pip install -r requirements.txt
+```
+
+You also need to clone the DINOv3 repository:
+
+```bash
+git clone https://github.com/facebookresearch/dinov3.git
 ```
 
 Make sure to download the train and test datasets and place them in the `data` folder. Your folder should look like this:
@@ -55,7 +61,7 @@ python run.py --save_path "triplet_metric_fixed.pth" --model DinoMetricLearning 
 
 The `main.ipynb` notebook contains the inference code for testing and visualization. Tu run it, simply import it to KAGGLE (and set the global constant at the top `KAGGLE = True`) or run it locally (set `KAGGLE = False`).
 
-![Example Output](https://github.com/liuktc/ML4CV_Assignment/blob/62ef47c84dfc9df7f232196583aa8d1f25141a0c/output.png?raw=true)
+![Example Output](https://raw.githubusercontent.com/liuktc/ML4CV_Assignment/refs/heads/main/static/output.png)
 
 ## Contacts
 
